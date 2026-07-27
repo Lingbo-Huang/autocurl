@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a runtime, protocol, or workflow improvement
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Developer problem
+      description: What debugging task is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current workaround
+      description: How do developers solve it now?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include the runtime, client library, and protocol when relevant.
+    validations:
+      required: true

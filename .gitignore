@@ -1,0 +1,5 @@
+/autocurl
+/dist/
+.DS_Store
+*.cover
+*.out

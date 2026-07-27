@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a sanitized runtime or protocol compatibility problem
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never include credentials, cookies, private keys, customer data, or output produced with `--show-secrets`.
+  - type: input
+    id: version
+    attributes:
+      label: autocurl version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, runtime version, and HTTP client/library
+      placeholder: "macOS arm64, JDK 24, java.net.http"
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Protocol
+      options:
+        - HTTP/1.x
+        - HTTP/2
+        - gRPC over TLS
+        - gRPC h2c
+        - WebSocket ws
+        - WebSocket wss
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Sanitized reproduction
+      description: Include the command and the smallest safe reproducer.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Sanitized output
+      description: Prefer `autocurl doctor` and `--verbose` output with internal values removed.
+    validations:
+      required: true
