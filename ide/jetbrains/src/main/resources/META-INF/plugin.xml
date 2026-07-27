@@ -1,0 +1,44 @@
+<idea-plugin url="https://github.com/Lingbo-Huang/autocurl">
+    <id>com.github.lingbohuang.autocurl</id>
+    <name>Autocurl</name>
+    <vendor url="https://github.com/Lingbo-Huang/autocurl">Huang Lingbo</vendor>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+                id="Autocurl"
+                anchor="right"
+                factoryClass="com.github.lingbohuang.autocurl.AutocurlToolWindowFactory"/>
+        <applicationConfigurable
+                parentId="tools"
+                id="com.github.lingbohuang.autocurl.settings"
+                displayName="Autocurl"
+                instance="com.github.lingbohuang.autocurl.AutocurlConfigurable"/>
+    </extensions>
+
+    <actions>
+        <action
+                id="Autocurl.RunSelected"
+                class="com.github.lingbohuang.autocurl.RunSelectedWithAutocurlAction"
+                text="Run Selected with Autocurl"
+                description="Run the selected configuration with outbound request capture">
+            <add-to-group group-id="RunMenu" anchor="after" relative-to-action="Run"/>
+        </action>
+        <action
+                id="Autocurl.DebugSelected"
+                class="com.github.lingbohuang.autocurl.DebugSelectedWithAutocurlAction"
+                text="Debug Selected with Autocurl"
+                description="Debug the selected configuration with outbound request capture">
+            <add-to-group group-id="RunMenu" anchor="after" relative-to-action="Debug"/>
+        </action>
+        <action
+                id="Autocurl.RenderSelectedRequest"
+                class="com.github.lingbohuang.autocurl.RenderSelectedRequestAction"
+                text="Render Selected Request JSON as cURL"
+                description="Generate and copy a cURL from request JSON selected in the editor">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

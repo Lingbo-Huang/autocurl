@@ -1,0 +1,212 @@
+{
+  "name": "autocurl",
+  "displayName": "Autocurl",
+  "description": "Capture outbound requests from IDE debug sessions and copy complete replayable cURLs.",
+  "version": "0.2.0",
+  "publisher": "lingbo-huang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lingbo-Huang/autocurl.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "keywords": [
+    "curl",
+    "http",
+    "debug",
+    "grpc",
+    "websocket",
+    "proxy"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:autocurl.requests",
+    "onCommand:autocurl.start",
+    "onCommand:autocurl.stop",
+    "onCommand:autocurl.copyLast",
+    "onCommand:autocurl.renderSelection",
+    "onDebug"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "autocurl.start",
+        "title": "Autocurl: Start Capture"
+      },
+      {
+        "command": "autocurl.stop",
+        "title": "Autocurl: Stop Capture"
+      },
+      {
+        "command": "autocurl.copyLast",
+        "title": "Autocurl: Copy Last cURL"
+      },
+      {
+        "command": "autocurl.copyRequest",
+        "title": "Autocurl: Copy cURL"
+      },
+      {
+        "command": "autocurl.showRequest",
+        "title": "Autocurl: Show cURL"
+      },
+      {
+        "command": "autocurl.clear",
+        "title": "Autocurl: Clear Requests"
+      },
+      {
+        "command": "autocurl.renderSelection",
+        "title": "Autocurl: Render Selected Request JSON"
+      },
+      {
+        "command": "autocurl.downloadBinary",
+        "title": "Autocurl: Download/Update Engine"
+      }
+    ],
+    "configuration": {
+      "title": "Autocurl",
+      "properties": {
+        "autocurl.binaryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to the autocurl executable. Empty uses the managed download or PATH."
+        },
+        "autocurl.autoDownload": {
+          "type": "boolean",
+          "default": true,
+          "description": "Download the matching autocurl release from GitHub when no compatible executable is installed."
+        },
+        "autocurl.autoStartOnDebug": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start capture automatically and inject its process-scoped environment into debug launches."
+        },
+        "autocurl.injectDebugEnvironment": {
+          "type": "boolean",
+          "default": true,
+          "description": "Merge capture proxy and temporary CA variables into IDE debug configurations."
+        },
+        "autocurl.match": {
+          "type": "string",
+          "default": "",
+          "description": "Only show requests whose URL contains this text."
+        },
+        "autocurl.method": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ],
+          "description": "Only show requests with this HTTP method."
+        },
+        "autocurl.replayHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Headers added only to generated cURLs, for example: x-debug-info: true."
+        },
+        "autocurl.liveHeaders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Headers injected into live requests. Use with care."
+        },
+        "autocurl.maxBodyBytes": {
+          "type": "number",
+          "default": 1048576,
+          "minimum": 1,
+          "description": "Maximum request-body bytes retained for cURL generation."
+        },
+        "autocurl.showSecrets": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include credentials and sensitive fields in output. Unsafe for shared logs."
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "autocurl.requests",
+          "name": "Autocurl Requests"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "autocurl.requests",
+        "contents": "Capture outbound requests from your next debug launch.\n[Start Capture](command:autocurl.start)\n[Open Settings](command:workbench.action.openSettings?%5B%22%40ext%3Alingbo-huang.autocurl%22%5D)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "autocurl.start",
+          "when": "view == autocurl.requests",
+          "group": "navigation@1"
+        },
+        {
+          "command": "autocurl.stop",
+          "when": "view == autocurl.requests",
+          "group": "navigation@2"
+        },
+        {
+          "command": "autocurl.clear",
+          "when": "view == autocurl.requests",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "autocurl.copyRequest",
+          "when": "view == autocurl.requests && viewItem == autocurl.request",
+          "group": "inline"
+        },
+        {
+          "command": "autocurl.showRequest",
+          "when": "view == autocurl.requests && viewItem == autocurl.request",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "autocurl.copyLast",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c"
+      }
+    ]
+  },
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck",
+    "vscode:prepublish": "npm run compile",
+    "package": "npm run clean && npm run typecheck && npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}

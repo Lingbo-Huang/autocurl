@@ -3,3 +3,13 @@
 .DS_Store
 *.cover
 *.out
+
+# VS Code / Cursor extension build output
+/ide/vscode/node_modules/
+/ide/vscode/dist/
+/ide/vscode/*.vsix
+
+# JetBrains plugin build output and downloaded SDK state
+/ide/jetbrains/.gradle/
+/ide/jetbrains/.intellijPlatform/
+/ide/jetbrains/build/

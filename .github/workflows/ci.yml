@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  engine:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -23,3 +23,40 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
       - run: go build ./cmd/autocurl
+
+  vscode-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ide/vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ide/vscode/package-lock.json
+      - run: npm ci
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autocurl-vscode-vsix
+          path: ide/vscode/*.vsix
+
+  jetbrains-plugin:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ide/jetbrains
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autocurl-jetbrains-zip
+          path: ide/jetbrains/build/distributions/*.zip

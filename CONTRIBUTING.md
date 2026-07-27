@@ -35,6 +35,20 @@ Changes to capture behavior should include an integration test. Changes to JSON
 fields or command flags should preserve backward compatibility or document the
 breaking change.
 
+IDE adapters:
+
+```bash
+cd ide/vscode
+npm ci
+npm run package
+
+cd ../jetbrains
+./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+```
+
+The VSIX and JetBrains ZIP must use the same version as the minimum compatible
+Go engine. See [docs/ide-plugins.md](docs/ide-plugins.md).
+
 ## Pull requests
 
 Keep each pull request focused. Explain the user-visible problem, the protocol
