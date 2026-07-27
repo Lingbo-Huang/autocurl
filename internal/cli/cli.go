@@ -20,7 +20,7 @@ import (
 	"github.com/Lingbo-Huang/autocurl/internal/render"
 )
 
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 type stringList []string
 
@@ -49,6 +49,10 @@ func Run(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	case "doctor":
 		return doctor(jsonOutput, stdout)
+	case "proxy":
+		return proxyCommand(arguments[1:], jsonOutput, os.Stdin, stdout, stderr)
+	case "render":
+		return renderCommand(arguments[1:], jsonOutput, os.Stdin, stdout, stderr)
 	case "run":
 		return runCommand(arguments[1:], jsonOutput, stdout, stderr)
 	default:
@@ -66,16 +70,19 @@ Usage:
 
 Commands:
   doctor   Check runtime compatibility and available language tools
+  proxy    Start an IDE-controlled capture session
+  render   Build a cURL from debugger-visible request data without sending it
   run      Capture requests made by one child process
   version  Print the autocurl version
 
 Examples:
   autocurl doctor
-  autocurl run --all -- python3 app.py
-  autocurl run --replay-header 'x-debug-info: true' -- go run ./cmd/server
+  autocurl --json proxy --lifetime-stdin
+  autocurl run --all --match '/orders' --copy -- python3 app.py
+  autocurl render --request request.json --copy
   autocurl --json run --all -- python3 app.py
 
-Run "autocurl run --help" for capture options.
+Run "autocurl <command> --help" for details.
 `)
 }
 
@@ -150,6 +157,10 @@ func runCommand(arguments []string, globalJSON bool, stdout, stderr io.Writer) i
 	showSecrets := flags.Bool("show-secrets", false, "include credentials and sensitive fields in output (unsafe)")
 	jsonOutput := flags.Bool("json", globalJSON, "emit stable JSON Lines on stdout")
 	verbose := flags.Bool("verbose", false, "print proxy setup details")
+	match := flags.String("match", "", "emit only requests whose URL contains this text")
+	method := flags.String("method", "", "emit only requests with this HTTP method")
+	copyCurl := flags.Bool("copy", false, "copy each emitted cURL to the clipboard; the latest match remains")
+	outputPath := flags.String("output", "", "write the latest emitted cURL to this file")
 	flags.Var(&replayHeaderValues, "replay-header", "header added only to generated cURL; repeatable")
 	flags.Var(&liveHeaderValues, "live-header", "header injected into live traffic and generated cURL; repeatable")
 	flags.Usage = func() {
@@ -162,6 +173,8 @@ Options:
 		fmt.Fprint(flags.Output(), `
 Examples:
   autocurl run --all -- python3 app.py
+  autocurl run --all --match '/orders' --copy -- python3 app.py
+  autocurl run --all --method POST --output request.sh -- java App.java
   autocurl run --replay-header 'x-debug-info: true' -- go run .
   autocurl run --live-header 'x-debug: 1' --status-min 500 -- ./service
 `)
@@ -199,39 +212,26 @@ Examples:
 		return 2
 	}
 
-	authority, err := capture.NewAuthority()
-	if err != nil {
-		fmt.Fprintf(stderr, "autocurl run: %v\n", err)
-		return 1
-	}
-	tempDirectory, err := os.MkdirTemp("", "autocurl-")
-	if err != nil {
-		fmt.Fprintf(stderr, "autocurl run: create temporary directory: %v\n", err)
-		return 1
-	}
-	defer os.RemoveAll(tempDirectory)
-	caPath := filepath.Join(tempDirectory, "autocurl-ca.pem")
-	if err := os.WriteFile(caPath, authority.PEM(), 0o600); err != nil {
-		fmt.Fprintf(stderr, "autocurl run: write temporary CA: %v\n", err)
-		return 1
-	}
-
 	eventWriter := stderr
 	if *jsonOutput {
 		eventWriter = stdout
 	}
 	emitter := newEmitter(emitterOptions{
-		Writer:        eventWriter,
-		JSON:          *jsonOutput,
-		All:           *all,
-		StatusMin:     *statusMin,
-		Slow:          *slow,
-		ReplayHeaders: replayHeaders,
-		ShowSecrets:   *showSecrets,
+		Writer:           eventWriter,
+		JSON:             *jsonOutput,
+		All:              *all,
+		StatusMin:        *statusMin,
+		Slow:             *slow,
+		ReplayHeaders:    replayHeaders,
+		ShowSecrets:      *showSecrets,
+		Match:            *match,
+		Method:           strings.ToUpper(strings.TrimSpace(*method)),
+		Copy:             *copyCurl,
+		OutputPath:       *outputPath,
+		DiagnosticWriter: stderr,
 	})
 
-	proxy, err := capture.NewProxy(capture.Options{
-		Authority:   authority,
+	session, err := startCaptureSession(capture.Options{
 		LiveHeaders: liveHeaders,
 		MaxBody:     *maxBody,
 		OnEvent:     emitter.Emit,
@@ -240,27 +240,18 @@ Examples:
 		fmt.Fprintf(stderr, "autocurl run: %v\n", err)
 		return 1
 	}
-	address, err := proxy.Start()
-	if err != nil {
-		fmt.Fprintf(stderr, "autocurl run: %v\n", err)
-		return 1
-	}
-	defer proxy.Close()
+	defer session.Close()
 
-	childEnvironment, truststoreNote := buildChildEnvironment(os.Environ(), address, caPath, tempDirectory)
-	childEnvironment, goTrustNote, goTrustErr := addGoTrustOverlay(childEnvironment, tempDirectory, caPath)
+	childEnvironment, environmentNotes, environmentErr := session.Environment(os.Environ())
 	if *verbose {
-		fmt.Fprintf(stderr, "[autocurl] proxy http://%s\n", address)
-		fmt.Fprintf(stderr, "[autocurl] ephemeral CA %s\n", caPath)
-		if truststoreNote != "" {
-			fmt.Fprintf(stderr, "[autocurl] %s\n", truststoreNote)
+		fmt.Fprintf(stderr, "[autocurl] proxy %s\n", session.ProxyURL())
+		fmt.Fprintf(stderr, "[autocurl] ephemeral CA %s\n", session.CAPath)
+		for _, note := range environmentNotes {
+			fmt.Fprintf(stderr, "[autocurl] %s\n", note)
 		}
-		if goTrustNote != "" {
-			fmt.Fprintf(stderr, "[autocurl] %s\n", goTrustNote)
-		}
-		if goTrustErr != nil {
-			fmt.Fprintf(stderr, "[autocurl] Go CA overlay unavailable: %v\n", goTrustErr)
-		}
+	}
+	if environmentErr != nil && *verbose {
+		fmt.Fprintf(stderr, "[autocurl] environment compatibility warning: %v\n", environmentErr)
 	}
 
 	command := exec.Command(commandArguments[0], commandArguments[1:]...)
@@ -303,22 +294,35 @@ Examples:
 }
 
 type emitterOptions struct {
-	Writer        io.Writer
-	JSON          bool
-	All           bool
-	StatusMin     int
-	Slow          time.Duration
-	ReplayHeaders []config.Header
-	ShowSecrets   bool
+	Writer           io.Writer
+	DiagnosticWriter io.Writer
+	JSON             bool
+	All              bool
+	StatusMin        int
+	Slow             time.Duration
+	ReplayHeaders    []config.Header
+	ShowSecrets      bool
+	Match            string
+	Method           string
+	Copy             bool
+	OutputPath       string
+	CopyText         func(string) error
 }
 
 type emitter struct {
 	options emitterOptions
 	encoder *json.Encoder
 	mu      sync.Mutex
+	nextID  int64
 }
 
 func newEmitter(options emitterOptions) *emitter {
+	if options.DiagnosticWriter == nil {
+		options.DiagnosticWriter = options.Writer
+	}
+	if options.CopyText == nil {
+		options.CopyText = copyToClipboard
+	}
 	instance := &emitter{options: options}
 	if options.JSON {
 		instance.encoder = json.NewEncoder(options.Writer)
@@ -332,7 +336,19 @@ func (e *emitter) Emit(event capture.Event) {
 
 	if event.Method == "" && event.URL == "" {
 		if event.Error != nil {
-			fmt.Fprintf(e.options.Writer, "[autocurl] %v\n", event.Error)
+			if e.options.JSON {
+				_ = e.encoder.Encode(struct {
+					SchemaVersion string `json:"schema_version"`
+					Type          string `json:"type"`
+					Error         string `json:"error"`
+				}{
+					SchemaVersion: "1",
+					Type:          "error",
+					Error:         event.Error.Error(),
+				})
+			} else {
+				fmt.Fprintf(e.options.Writer, "[autocurl] %v\n", event.Error)
+			}
 		}
 		return
 	}
@@ -340,6 +356,8 @@ func (e *emitter) Emit(event capture.Event) {
 		return
 	}
 	kind := fallback(event.Kind, "http")
+	e.nextID++
+	id := e.nextID
 
 	curl := render.Curl(render.Request{
 		Method:          event.Method,
@@ -354,10 +372,24 @@ func (e *emitter) Emit(event capture.Event) {
 		IncludeWriteOut: true,
 	})
 	safeError := sanitizeEventError(event.Error, event.URL, curl.DisplayURL)
+	copyError := ""
+	if e.options.Copy {
+		if err := e.options.CopyText(curl.Command); err != nil {
+			copyError = err.Error()
+		}
+	}
+	outputError := ""
+	if e.options.OutputPath != "" {
+		if err := os.WriteFile(e.options.OutputPath, []byte(curl.Command+"\n"), 0o600); err != nil {
+			outputError = err.Error()
+		}
+	}
 
 	if e.options.JSON {
 		result := struct {
 			SchemaVersion string `json:"schema_version"`
+			Type          string `json:"type"`
+			ID            int64  `json:"id"`
 			Timestamp     string `json:"timestamp"`
 			Method        string `json:"method"`
 			URL           string `json:"url"`
@@ -372,8 +404,14 @@ func (e *emitter) Emit(event capture.Event) {
 			Redacted      bool   `json:"redacted"`
 			BodyTruncated bool   `json:"body_truncated"`
 			Warning       string `json:"warning,omitempty"`
+			Copied        bool   `json:"copied,omitempty"`
+			CopyError     string `json:"copy_error,omitempty"`
+			OutputFile    string `json:"output_file,omitempty"`
+			OutputError   string `json:"output_error,omitempty"`
 		}{
 			SchemaVersion: "1",
+			Type:          "request",
+			ID:            id,
 			Timestamp:     event.Timestamp.UTC().Format(time.RFC3339Nano),
 			Method:        event.Method,
 			URL:           curl.DisplayURL,
@@ -387,6 +425,10 @@ func (e *emitter) Emit(event capture.Event) {
 			Redacted:      curl.Redacted,
 			BodyTruncated: event.BodyTruncated,
 			Warning:       curl.Warning,
+			Copied:        e.options.Copy && copyError == "",
+			CopyError:     copyError,
+			OutputFile:    e.options.OutputPath,
+			OutputError:   outputError,
 		}
 		if safeError != nil {
 			result.Error = safeError.Error()
@@ -395,24 +437,44 @@ func (e *emitter) Emit(event capture.Event) {
 		return
 	}
 
-	fmt.Fprintf(e.options.Writer, "\n[autocurl] %s\n",
+	fmt.Fprintf(e.options.Writer, "\n[autocurl #%d] %s\n", id,
 		render.Summary(event.Method, curl.DisplayURL, event.Status, event.Duration.Round(time.Millisecond).String(), safeError),
 	)
-	fmt.Fprintf(e.options.Writer, "[autocurl] %s · client %s · upstream %s\n",
+	fmt.Fprintf(e.options.Writer, "[autocurl #%d] %s · client %s · upstream %s\n", id,
 		kind, fallback(event.Protocol, "unknown"), fallback(event.UpstreamProto, "unknown"))
 	if kind == "grpc" && event.GRPCStatus != "" {
-		fmt.Fprintf(e.options.Writer, "[autocurl] grpc-status: %s\n", event.GRPCStatus)
+		fmt.Fprintf(e.options.Writer, "[autocurl #%d] grpc-status: %s\n", id, event.GRPCStatus)
 	}
 	if curl.Redacted {
-		fmt.Fprintln(e.options.Writer, "[autocurl] sensitive values were redacted; use --show-secrets only for local private debugging")
+		fmt.Fprintf(e.options.Writer, "[autocurl #%d] sensitive values were redacted; use --show-secrets only for local private debugging\n", id)
 	}
 	if curl.Warning != "" {
-		fmt.Fprintf(e.options.Writer, "[autocurl] warning: %s\n", curl.Warning)
+		fmt.Fprintf(e.options.Writer, "[autocurl #%d] warning: %s\n", id, curl.Warning)
 	}
 	fmt.Fprintf(e.options.Writer, "%s\n", curl.Command)
+	if e.options.Copy {
+		if copyError == "" {
+			fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl #%d] copied cURL to clipboard\n", id)
+		} else {
+			fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl #%d] warning: could not copy cURL: %s\n", id, copyError)
+		}
+	}
+	if e.options.OutputPath != "" {
+		if outputError == "" {
+			fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl #%d] wrote cURL to %s\n", id, e.options.OutputPath)
+		} else {
+			fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl #%d] warning: could not write cURL: %s\n", id, outputError)
+		}
+	}
 }
 
 func (e *emitter) shouldEmit(event capture.Event) bool {
+	if e.options.Match != "" && !strings.Contains(event.URL, e.options.Match) {
+		return false
+	}
+	if e.options.Method != "" && !strings.EqualFold(event.Method, e.options.Method) {
+		return false
+	}
 	if e.options.All || event.Error != nil || event.Status >= e.options.StatusMin ||
 		(event.Kind == "grpc" && event.GRPCStatus != "" && event.GRPCStatus != "0") {
 		return true

@@ -6,7 +6,11 @@ operating-system proxy.
 
 ```mermaid
 flowchart LR
-    A["Wrapped child process<br/>Go / Python / Java / Node"] -->|"HTTP_PROXY / HTTPS_PROXY<br/>runtime trust settings"| B["Local proxy<br/>127.0.0.1:ephemeral"]
+    O["CLI run command"] --> A
+    P["VS Code / Cursor<br/>or JetBrains plugin"] -->|"JSONL ready/request"| Q["IDE proxy session"]
+    Q -->|"temporary debug environment"| A["Wrapped process<br/>Go / Python / Java / Node"]
+    O --> A
+    A -->|"HTTP_PROXY / HTTPS_PROXY<br/>runtime trust settings"| B["Local proxy<br/>127.0.0.1:ephemeral"]
     B --> C{"Protocol detection"}
     C -->|"HTTP/1.0 or HTTP/1.1"| D["net/http handler"]
     C -->|"CONNECT + TLS ALPN h2"| E["HTTP/2 server"]
@@ -22,6 +26,8 @@ flowchart LR
     F --> K
     G --> K
     K --> L["Redact and render<br/>human cURL or JSON Lines"]
+    M["Debugger-visible request JSON"] --> N["autocurl render<br/>no network request"]
+    N --> L
 ```
 
 ## HTTPS interception
@@ -60,6 +66,16 @@ bodies are not retained.
 For gRPC, the proxy preserves `TE: trailers`, streams response bytes with
 flushing, forwards trailers, and records `grpc-status`. Protobuf frames are
 treated as opaque binary data.
+
+The `render` command bypasses the proxy. It accepts method, URL, headers, and
+body values exported from a debugger, then calls the same redaction and cURL
+renderer used by live events. It never sends the described request.
+
+The `proxy` command exposes capture lifecycle to IDE adapters. Its first JSON
+Line is a `ready` event containing generated environment overrides, never the
+parent environment. Later lines are `request` events produced by the same
+emitter as `run`. IDE adapters keep stdin open for session ownership; closing
+it shuts down the proxy and deletes all ephemeral files.
 
 ## Known design boundaries
 

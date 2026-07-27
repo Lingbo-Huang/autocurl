@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  engine:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+      - name: Build archive
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          package="autocurl-${version}-${GOOS}-${GOARCH}"
+          mkdir -p "dist/${package}"
+          binary="autocurl"
+          if [[ "${GOOS}" == "windows" ]]; then binary="autocurl.exe"; fi
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+            -o "dist/${package}/${binary}" ./cmd/autocurl
+          cp LICENSE README.md "dist/${package}/"
+          if [[ "${GOOS}" == "windows" ]]; then
+            (cd dist && zip -qr "${package}.zip" "${package}")
+          else
+            tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+  ide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ide/vscode/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+      - run: npm ci
+        working-directory: ide/vscode
+      - run: npm run package
+        working-directory: ide/vscode
+      - run: ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+        working-directory: ide/jetbrains
+      - name: Collect IDE packages
+        run: |
+          mkdir -p release-ide
+          cp ide/vscode/*.vsix release-ide/
+          cp ide/jetbrains/build/distributions/*.zip release-ide/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ide-plugins
+          path: release-ide/*
+
+  publish:
+    needs:
+      - engine
+      - ide
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create checksums
+        run: |
+          cd release
+          sha256sum *.tar.gz *.zip *.vsix > SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --generate-notes \
+            release/*

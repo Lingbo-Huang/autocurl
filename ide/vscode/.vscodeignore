@@ -1,0 +1,6 @@
+.gitignore
+esbuild.js
+node_modules
+src
+tsconfig.json
+*.vsix
