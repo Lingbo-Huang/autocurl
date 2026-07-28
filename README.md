@@ -35,6 +35,11 @@ corporate network blocks GitHub downloads, install the binary once and set
 `autocurl.binaryPath` in VS Code/Cursor or
 **Settings → Tools → Autocurl** in JetBrains IDEs.
 
+The version shown on the JetBrains plugin page is the IDE adapter version, not
+the cached Go engine version. Updating only the engine does not change that
+number. Fixes spanning both layers require installing the new plugin and
+restarting the IDE; the plugin then verifies and updates its managed engine.
+
 The plugins create only a process-scoped proxy session. They do not change the
 operating-system proxy, add a permanent CA, or modify the original JetBrains
 Run Configuration.

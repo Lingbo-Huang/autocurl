@@ -39,6 +39,10 @@ Go 引擎，并使用 `SHA256SUMS` 校验。如果公司网络不能访问 GitHu
 一次二进制，然后在 VS Code/Cursor 的 `autocurl.binaryPath`，或 JetBrains 的
 **Settings → Tools → Autocurl** 中配置路径。
 
+JetBrains 插件页显示的是 IDE 插件版本；后台 Go 引擎是另一个组件，默认缓存
+在 JetBrains Cache 目录中。更新引擎不会改变插件页版本。涉及两层的修复需要
+安装新版插件并重启 IDE，插件随后会自动校验并更新匹配的引擎。
+
 断点停在真正发送之前时，在编辑器里选择包含 `method`、`url`、`headers`、
 `body` 的请求 JSON，然后执行 **Render Selected Request JSON**。插件只生成并
 复制 cURL，不会发送网络请求。

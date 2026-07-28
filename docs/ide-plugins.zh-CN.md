@@ -6,7 +6,7 @@ Autocurl 采用“一套 Go 核心、两个薄插件”的结构：
 flowchart LR
     V["VS Code / Cursor 插件"] --> P["autocurl proxy JSONL 会话"]
     J["JetBrains 插件"] --> P
-    P --> E["仅注入当前调试进程的环境"]
+    P --> E["注入当前调试进程环境<br/>GoLand 同时注入临时编译 overlay"]
     E --> A["Go / Python / Java / Node 服务"]
     A --> C["请求事件 + 完整 cURL"]
     C --> V
@@ -14,7 +14,18 @@ flowchart LR
 ```
 
 HTTP/2、gRPC、WebSocket、TLS、脱敏和 cURL 生成都在同一个 Go 引擎中实现。
-IDE 插件只负责开始/停止、注入调试环境、展示请求和复制。
+IDE 插件只负责开始/停止、注入本次 Run/Debug、展示请求和复制。GoLand 是一个
+例外：Go 在 macOS/Windows 上会走平台证书验证，因此插件还会把引擎生成的临时
+overlay 传给本次 `go build`。它只修改临时运行配置，不会写回原配置。
+
+### 插件版本和本地引擎版本不是一回事
+
+- **JetBrains 插件**是安装在 IDE 中的界面和 Run/Debug 适配层，版本显示在
+  **Settings → Plugins → Autocurl**。
+- **Go 引擎**是插件启动的后台代理程序，默认下载到 JetBrains Cache 下的
+  `autocurl/bin`，插件页不会显示它的版本。
+- 插件会校验最低引擎版本并自动替换旧缓存，但只替换引擎不会改变插件页版本。
+  修复同时涉及两层时，必须安装新版插件并重启 IDE。
 
 ## VS Code / Cursor
 
@@ -92,7 +103,7 @@ Node.js、Gradle 等配置使用的环境变量接口并不完全相同；插件
 
 ```bash
 cd ide/jetbrains
-./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
 ```
 
 产物：
@@ -102,7 +113,7 @@ cd ide/jetbrains
 
 ```bash
 AUTOCURL_LOCAL_IDE="/Applications/GoLand.app" \
-  ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+  ./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
 ```
 
 发布 JetBrains Marketplace 使用 `./gradlew publishPlugin`，通过环境变量
@@ -138,7 +149,8 @@ tls: failed to verify certificate: x509: “example.com” certificate is not tr
 先确认使用的是 0.2.3 或更高版本的 IDE 插件和引擎。0.2.1 插件曾错误地继续
 复用 0.2.0 引擎，而 0.2.2 在从 macOS 图形界面启动的 GoLand 中又可能找不到
 Go SDK。0.2.3 会从 `GOROOT`、标准安装目录和用户登录 Shell 查找 Go，并强制
-插件与引擎版本匹配，旧的托管引擎会被自动替换。
+插件与引擎版本匹配，旧的托管引擎会被自动替换；JetBrains 插件还会把临时
+overlay 追加到 GoLand 的编译参数，避免它只进入运行环境、没有参与 `go build`。
 
 ## 引擎自动下载与安全
 

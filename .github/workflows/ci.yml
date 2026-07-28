@@ -55,7 +55,7 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
-      - run: ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+      - run: ./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
       - uses: actions/upload-artifact@v4
         with:
           name: autocurl-jetbrains-zip

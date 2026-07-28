@@ -109,11 +109,19 @@ both the common `getEnvs/setEnvs` interface and GoLand's
 configuration that exposes no environment map receives a warning containing
 its concrete class name.
 
+The JetBrains plugin and the local engine are separate versioned components.
+The plugin version shown under **Settings → Plugins → Autocurl** belongs to the
+IDE adapter. The engine is a background proxy cached under the JetBrains cache
+directory. Updating only the engine does not change the version shown on the
+plugin page. When a fix touches both layers, install the new plugin and restart
+the IDE; the plugin then verifies and updates its managed engine.
+
 Use Autocurl 0.2.3 or newer for Go HTTPS capture on macOS. Version 0.2.1 could
 reuse the 0.2.0 engine, while version 0.2.2 could miss the Go SDK when GoLand
 was launched from the macOS GUI with a minimal `PATH`. Version 0.2.3 discovers
 Go through `GOROOT`, standard installation locations, and the user's login
-shell, and requires the matching engine version.
+shell, requires the matching engine version, and passes the temporary overlay
+to GoLand's build parameters so it participates in `go build`.
 
 When a breakpoint is before send, select request JSON in an editor and use
 **Render Selected Request JSON as cURL**. The entire JSON document is used when
@@ -125,7 +133,7 @@ Requires JDK 21 or lets the configured Foojay resolver provision it:
 
 ```bash
 cd ide/jetbrains
-./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
 ```
 
 Output:

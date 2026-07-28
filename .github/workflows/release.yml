@@ -95,7 +95,7 @@ jobs:
         working-directory: ide/vscode
       - run: npm run package
         working-directory: ide/vscode
-      - run: ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+      - run: ./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
         working-directory: ide/jetbrains
       - name: Collect IDE packages
         run: |

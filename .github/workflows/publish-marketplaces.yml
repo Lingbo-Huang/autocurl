@@ -148,7 +148,7 @@ jobs:
       - name: Build and verify JetBrains plugin
         if: ${{ inputs.target == 'all' || inputs.target == 'jetbrains' }}
         working-directory: ide/jetbrains
-        run: ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+        run: ./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
 
       - name: Prepare JetBrains signing files
         if: ${{ (inputs.target == 'all' || inputs.target == 'jetbrains') && env.JETBRAINS_READY == 'true' }}
