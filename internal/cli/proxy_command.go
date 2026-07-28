@@ -93,6 +93,10 @@ Examples:
 		fmt.Fprintln(stderr, "autocurl proxy: --max-body must be greater than zero")
 		return 2
 	}
+	if err := validateBypassTargets(bypassValues); err != nil {
+		fmt.Fprintf(stderr, "autocurl proxy: invalid --bypass: %v\n", err)
+		return 2
+	}
 	captureMode, err := parseCaptureMode(*mode)
 	if err != nil {
 		fmt.Fprintf(stderr, "autocurl proxy: %v\n", err)

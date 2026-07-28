@@ -71,6 +71,8 @@ func (session *captureSession) Environment(
 	if javaNote != "" {
 		notes = append(notes, javaNote)
 	}
+	bypass := mergeBypassTargets(base, bypassTargets)
+	notes = append(notes, bypassCompatibilityNotes(bypass)...)
 	environment, goNote, goErr := addGoTrustOverlay(
 		environment,
 		session.TempDirectory,

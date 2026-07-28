@@ -7,12 +7,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -270,6 +272,10 @@ Examples:
 	}
 	if *maxBody < 1 {
 		fmt.Fprintln(stderr, "autocurl run: --max-body must be greater than zero")
+		return 2
+	}
+	if err := validateBypassTargets(bypassValues); err != nil {
+		fmt.Fprintf(stderr, "autocurl run: invalid --bypass: %v\n", err)
 		return 2
 	}
 	captureMode, err := parseCaptureMode(*mode)
@@ -718,26 +724,129 @@ func mergeBypassTargets(base, configured []string) string {
 
 func javaNonProxyHosts(bypass string) string {
 	targets := strings.Split(bypass, ",")
-	for index, target := range targets {
+	result := make([]string, 0, len(targets))
+	for _, target := range targets {
 		target = strings.TrimSpace(target)
-		if prefix, err := netip.ParsePrefix(target); err == nil &&
-			prefix.Addr().Is4() && prefix.Bits()%8 == 0 {
-			address := prefix.Masked().Addr().As4()
-			octets := prefix.Bits() / 8
-			parts := make([]string, 0, octets+1)
-			for position := 0; position < octets; position++ {
-				parts = append(parts, fmt.Sprintf("%d", address[position]))
+		if prefix, err := netip.ParsePrefix(target); err == nil {
+			patterns := javaCIDRPatterns(prefix)
+			if len(patterns) > 0 {
+				result = append(result, patterns...)
 			}
-			if octets < len(address) {
-				parts = append(parts, "*")
-			}
-			target = strings.Join(parts, ".")
-		} else if strings.HasPrefix(target, ".") {
+			continue
+		}
+		if strings.HasPrefix(target, ".") {
 			target = "*" + target
 		}
-		targets[index] = target
+		result = append(result, target)
 	}
-	return strings.Join(targets, "|")
+	return strings.Join(result, "|")
+}
+
+func javaCIDRPatterns(prefix netip.Prefix) []string {
+	prefix = prefix.Masked()
+	if !prefix.Addr().Is4() {
+		if prefix.Bits() == prefix.Addr().BitLen() {
+			return []string{prefix.Addr().String()}
+		}
+		return nil
+	}
+	address := prefix.Addr().As4()
+	fullOctets := prefix.Bits() / 8
+	partialBits := prefix.Bits() % 8
+	fixed := make([]string, 0, 4)
+	for position := 0; position < fullOctets; position++ {
+		fixed = append(fixed, strconv.Itoa(int(address[position])))
+	}
+	if partialBits == 0 {
+		if fullOctets < len(address) {
+			fixed = append(fixed, "*")
+		}
+		return []string{strings.Join(fixed, ".")}
+	}
+	count := 1 << (8 - partialBits)
+	result := make([]string, 0, count)
+	for value := int(address[fullOctets]); value < int(address[fullOctets])+count; value++ {
+		parts := append([]string(nil), fixed...)
+		parts = append(parts, strconv.Itoa(value))
+		if fullOctets+1 < len(address) {
+			parts = append(parts, "*")
+		}
+		result = append(result, strings.Join(parts, "."))
+	}
+	return result
+}
+
+func validateBypassTargets(values []string) error {
+	for _, value := range values {
+		for _, target := range strings.Split(value, ",") {
+			target = strings.TrimSpace(target)
+			if target == "" {
+				continue
+			}
+			if strings.Contains(target, "://") {
+				return fmt.Errorf("%q is a URL; use only its host or IP", target)
+			}
+			if strings.ContainsAny(target, " \t\r\n") {
+				return fmt.Errorf("%q contains whitespace", target)
+			}
+			if _, err := netip.ParsePrefix(target); err == nil {
+				continue
+			}
+			if _, err := netip.ParseAddr(strings.Trim(target, "[]")); err == nil {
+				continue
+			}
+			host := target
+			if splitHost, port, err := net.SplitHostPort(target); err == nil {
+				host = strings.Trim(splitHost, "[]")
+				number, parseErr := strconv.Atoi(port)
+				if parseErr != nil || number < 1 || number > 65535 {
+					return fmt.Errorf("%q has an invalid port", target)
+				}
+			}
+			host = strings.TrimPrefix(host, "*.")
+			host = strings.TrimPrefix(host, ".")
+			if host == "" || strings.Contains(host, "/") {
+				return fmt.Errorf("%q is not a host, IP, domain suffix, or CIDR", target)
+			}
+			for _, character := range host {
+				if character >= 'a' && character <= 'z' ||
+					character >= 'A' && character <= 'Z' ||
+					character >= '0' && character <= '9' ||
+					strings.ContainsRune("-._*", character) {
+					continue
+				}
+				return fmt.Errorf("%q contains unsupported host characters", target)
+			}
+		}
+	}
+	return nil
+}
+
+func bypassCompatibilityNotes(bypass string) []string {
+	var cidrs []string
+	var ipv6CIDRs []string
+	for _, target := range strings.Split(bypass, ",") {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(target))
+		if err != nil {
+			continue
+		}
+		cidrs = append(cidrs, prefix.String())
+		if prefix.Addr().Is6() && prefix.Bits() < prefix.Addr().BitLen() {
+			ipv6CIDRs = append(ipv6CIDRs, prefix.String())
+		}
+	}
+	notes := make([]string, 0, 2)
+	if len(cidrs) > 0 {
+		notes = append(notes,
+			"CIDR bypass targets "+strings.Join(cidrs, ", ")+
+				" are supported by Go and expanded for Java IPv4; Node.js and some Python clients may require exact hosts or IPs.")
+	}
+	if len(ipv6CIDRs) > 0 {
+		notes = append(notes,
+			"Java http.nonProxyHosts cannot represent IPv6 CIDR targets "+
+				strings.Join(ipv6CIDRs, ", ")+"; configure exact IPv6 hosts for Java.")
+	}
+	return notes
 }
 
 func fallback(value, alternative string) string {

@@ -253,6 +253,36 @@ func TestJavaNonProxyHostsUsesJavaSeparators(t *testing.T) {
 	}
 }
 
+func TestJavaNonProxyHostsExpandsNonOctetIPv4CIDR(t *testing.T) {
+	got := javaNonProxyHosts("10.61.96.0/20")
+	for _, wanted := range []string{"10.61.96.*", "10.61.103.*", "10.61.111.*"} {
+		if !strings.Contains(got, wanted) {
+			t.Fatalf("Java CIDR expansion %q does not contain %q", got, wanted)
+		}
+	}
+	if strings.Contains(got, "/20") {
+		t.Fatalf("Java non-proxy hosts still contains unsupported CIDR syntax: %q", got)
+	}
+}
+
+func TestBypassTargetsRejectURLsAndExplainCIDRPortability(t *testing.T) {
+	if err := validateBypassTargets([]string{
+		"localhost",
+		".internal.example",
+		"10.61.98.0/24",
+		"[::1]",
+	}); err != nil {
+		t.Fatalf("valid bypass targets were rejected: %v", err)
+	}
+	if err := validateBypassTargets([]string{"https://api.example.com"}); err == nil {
+		t.Fatal("URL-shaped bypass target was accepted")
+	}
+	notes := bypassCompatibilityNotes("10.61.98.0/24,api.internal.example")
+	if len(notes) == 0 || !strings.Contains(notes[0], "Node.js") {
+		t.Fatalf("CIDR compatibility notes = %#v", notes)
+	}
+}
+
 func TestProxyLifetimeEndsWhenStdinCloses(t *testing.T) {
 	stdinReader, stdinWriter := io.Pipe()
 	var stdout, stderr bytes.Buffer
