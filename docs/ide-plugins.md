@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.2.2.vsix` with
+Install `autocurl-0.2.3.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -69,7 +69,7 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.2.2.vsix`.
+Output: `ide/vscode/autocurl-0.2.3.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
@@ -85,7 +85,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.2.2.zip` with
+Install `autocurl-jetbrains-0.2.3.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -109,10 +109,11 @@ both the common `getEnvs/setEnvs` interface and GoLand's
 configuration that exposes no environment map receives a warning containing
 its concrete class name.
 
-Autocurl 0.2.2 also requires the matching engine version. This prevents an IDE
-from reusing the 0.2.0 engine, whose macOS environment did not include the Go
-build-process CA overlay and could produce `x509: certificate is not trusted`
-for proxied HTTPS requests.
+Use Autocurl 0.2.3 or newer for Go HTTPS capture on macOS. Version 0.2.1 could
+reuse the 0.2.0 engine, while version 0.2.2 could miss the Go SDK when GoLand
+was launched from the macOS GUI with a minimal `PATH`. Version 0.2.3 discovers
+Go through `GOROOT`, standard installation locations, and the user's login
+shell, and requires the matching engine version.
 
 When a breakpoint is before send, select request JSON in an editor and use
 **Render Selected Request JSON as cURL**. The entire JSON document is used when
@@ -128,7 +129,7 @@ cd ide/jetbrains
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.2.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.3.zip`.
 
 For a faster local API check against an installed product:
 

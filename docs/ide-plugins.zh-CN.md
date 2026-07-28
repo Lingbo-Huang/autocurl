@@ -18,7 +18,7 @@ IDE 插件只负责开始/停止、注入调试环境、展示请求和复制。
 
 ## VS Code / Cursor
 
-安装 `autocurl-0.2.2.vsix` 后，默认直接按 F5：
+安装 `autocurl-0.2.3.vsix` 后，默认直接按 F5：
 
 1. 插件自动启动后台捕获会话。
 2. 在调试程序启动前注入临时代理和证书环境。
@@ -56,7 +56,7 @@ npm ci
 npm run package
 ```
 
-产物：`ide/vscode/autocurl-0.2.2.vsix`。
+产物：`ide/vscode/autocurl-0.2.3.vsix`。
 
 发布 VS Code Marketplace 需要创建 publisher 和凭据。Cursor 使用相同的
 VS Code 扩展格式，其扩展市场以 Open VSX 为底层来源。首次入驻、GitHub
@@ -96,7 +96,7 @@ cd ide/jetbrains
 ```
 
 产物：
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.2.zip`。
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.3.zip`。
 
 使用本机 IDE 快速验证：
 
@@ -135,9 +135,10 @@ curl --noproxy '*' -v http://127.0.0.1:8080/
 tls: failed to verify certificate: x509: “example.com” certificate is not trusted
 ```
 
-先确认使用的是 0.2.2 或更高版本的 IDE 插件和引擎。0.2.1 插件曾错误地继续
-复用 0.2.0 引擎，而 0.2.0 在 macOS 上没有 Go build-process CA overlay。
-0.2.2 开始，插件与引擎版本必须匹配，旧的托管引擎会被自动替换。
+先确认使用的是 0.2.3 或更高版本的 IDE 插件和引擎。0.2.1 插件曾错误地继续
+复用 0.2.0 引擎，而 0.2.2 在从 macOS 图形界面启动的 GoLand 中又可能找不到
+Go SDK。0.2.3 会从 `GOROOT`、标准安装目录和用户登录 Shell 查找 Go，并强制
+插件与引擎版本匹配，旧的托管引擎会被自动替换。
 
 ## 引擎自动下载与安全
 

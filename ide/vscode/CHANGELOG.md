@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Discover the configured Go SDK when VS Code or Cursor is launched from a
+  macOS GUI environment with a minimal `PATH`.
+- Keep the IDE packages aligned with the corrected 0.2.3 engine.
+
 ## 0.2.2
 
 - Require the matching Autocurl engine so macOS Go HTTPS capture gets the

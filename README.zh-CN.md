@@ -9,7 +9,7 @@
 ### VS Code / Cursor
 
 1. 从 [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases)
-   下载 `autocurl-0.2.2.vsix`。
+   下载 `autocurl-0.2.3.vsix`。
 2. 在命令面板执行 **Extensions: Install from VSIX...**。
 3. 像平时一样点击 Debug 或按 F5。
 4. 打开 **Explorer → Autocurl Requests**。点击某个请求查看完整 cURL，
@@ -20,7 +20,7 @@
 
 ### IntelliJ IDEA / GoLand / PyCharm / WebStorm
 
-1. 从 Releases 下载 `autocurl-jetbrains-0.2.2.zip`。
+1. 从 Releases 下载 `autocurl-jetbrains-0.2.3.zip`。
 2. 打开 **Settings → Plugins → ⚙ → Install Plugin from Disk**。
 3. 选择已有的 Run/Debug Configuration。
 4. 使用 **Run → Run Selected with Autocurl** 或

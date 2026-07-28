@@ -95,6 +95,13 @@ intellijPlatform {
             </p>
         """.trimIndent()
         changeNotes = """
+            <h3>0.2.3</h3>
+            <ul>
+              <li>Fixed Go HTTPS capture when JetBrains is launched from the macOS GUI and its engine process cannot find the configured Go SDK on PATH.</li>
+              <li>Added Go SDK discovery through GOROOT, standard installation paths, and the user's login shell.</li>
+              <li>Added a regression test for the minimal PATH used by macOS GUI applications.</li>
+            </ul>
+
             <h3>0.2.2</h3>
             <ul>
               <li>Fixed Go HTTPS capture on macOS by requiring the matching engine version.</li>
