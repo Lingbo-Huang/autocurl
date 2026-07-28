@@ -18,6 +18,9 @@
         <notificationGroup
                 id="Autocurl onboarding"
                 displayType="BALLOON"/>
+        <notificationGroup
+                id="Autocurl diagnostics"
+                displayType="BALLOON"/>
         <postStartupActivity
                 implementation="com.github.lingbohuang.autocurl.AutocurlStartupActivity"/>
     </extensions>

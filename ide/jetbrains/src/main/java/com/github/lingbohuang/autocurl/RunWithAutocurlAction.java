@@ -55,6 +55,7 @@ abstract class RunWithAutocurlAction extends AnAction {
         }
 
         CaptureSession session = CaptureSession.getInstance(project);
+        session.setRerunAction(() -> run(project, executor));
         session.start().whenComplete((ready, error) -> ApplicationManager.getApplication().invokeLater(() -> {
             if (error != null) {
                 Messages.showErrorDialog(project, rootMessage(error), "Autocurl Could Not Start");
@@ -64,7 +65,7 @@ abstract class RunWithAutocurlAction extends AnAction {
                     configuration,
                     session.mergeEnvironment(RunConfigurationEnvironment.read(configuration), ready)
             )) {
-                session.stop();
+                session.stopSession();
                 Messages.showErrorDialog(
                         project,
                         "Autocurl could not update the temporary Run/Debug settings for "
@@ -73,7 +74,19 @@ abstract class RunWithAutocurlAction extends AnAction {
                 );
                 return;
             }
-            ProgramRunnerUtil.executeConfiguration(project, temporary, executor);
+            session.expectProfile(configuration);
+            try {
+                ProgramRunnerUtil.executeConfiguration(project, temporary, executor);
+            } catch (RuntimeException launchError) {
+                session.cancelExpectedProfile(configuration);
+                session.stopSession();
+                Messages.showErrorDialog(
+                        project,
+                        rootMessage(launchError),
+                        "Autocurl Could Not Start the Application"
+                );
+                return;
+            }
             ToolWindow window = ToolWindowManager.getInstance(project).getToolWindow("Autocurl");
             if (window != null) window.show();
         }));

@@ -16,13 +16,16 @@ public final class AutocurlSettings implements PersistentStateComponent<Autocurl
     public static final class StateData {
         public String binaryPath = "";
         public boolean autoDownload = true;
+        public String captureMode = "safe";
         public String match = "";
         public String method = "";
         public int maxBodyBytes = 1024 * 1024;
+        public int startupDiagnosticSeconds = 15;
         public boolean showSecrets = false;
         public List<String> replayHeaders = new ArrayList<>();
         public List<String> liveHeaders = new ArrayList<>();
         public List<String> bypassTargets = new ArrayList<>();
+        public List<Integer> expectedListenPorts = new ArrayList<>();
         public boolean quickStartShown = false;
     }
 
@@ -35,6 +38,13 @@ public final class AutocurlSettings implements PersistentStateComponent<Autocurl
     public synchronized boolean markQuickStartShown() {
         if (state.quickStartShown) return false;
         state.quickStartShown = true;
+        return true;
+    }
+
+    public synchronized boolean addBypassTarget(String target) {
+        String normalized = target == null ? "" : target.trim();
+        if (normalized.isEmpty() || state.bypassTargets.contains(normalized)) return false;
+        state.bypassTargets.add(normalized);
         return true;
     }
 

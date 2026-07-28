@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -73,6 +74,19 @@ class RunConfigurationEnvironmentTest {
                 new Object(),
                 "-overlay=/tmp/autocurl-go-overlay.json"
         ));
+    }
+
+    @Test
+    void bypassTargetsAreTrimmedAndDeduplicated() {
+        AutocurlSettings settings = new AutocurlSettings();
+
+        assertTrue(settings.addBypassTarget(" api.internal.example "));
+        assertFalse(settings.addBypassTarget("api.internal.example"));
+        assertFalse(settings.addBypassTarget(" "));
+        assertEquals(
+                java.util.List.of("api.internal.example"),
+                settings.getState().bypassTargets
+        );
     }
 
     @Test

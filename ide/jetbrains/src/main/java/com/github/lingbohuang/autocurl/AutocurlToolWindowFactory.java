@@ -2,6 +2,11 @@ package com.github.lingbohuang.autocurl;
 
 import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.executors.DefaultRunExecutor;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationAction;
+import com.intellij.notification.NotificationGroupManager;
+import com.intellij.notification.NotificationType;
+import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ide.CopyPasteManager;
@@ -63,11 +68,13 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
                 project,
                 DefaultDebugExecutor.getDebugExecutorInstance()
         ));
-        JButton stop = new JButton("Stop");
-        stop.addActionListener(event -> session.stop());
+        JButton pause = new JButton("Pause Recording");
+        pause.addActionListener(event -> session.setRecording(!session.isRecording()));
+        JButton stop = new JButton("Stop Session");
+        stop.addActionListener(event -> session.stopSession());
         JButton copy = new JButton("Copy cURL");
         copy.addActionListener(event -> copySelected(list));
-        JButton render = new JButton("Render JSON");
+        JButton render = new JButton("Generate cURL from JSON");
         render.addActionListener(event -> RenderSelectedRequestAction.renderEditorRequest(project));
         JButton help = new JButton("Quick Start / 使用说明");
         help.addActionListener(event -> AutocurlHelp.show(project));
@@ -82,6 +89,7 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         toolbar.add(run);
         toolbar.add(debug);
+        toolbar.add(pause);
         toolbar.add(stop);
         toolbar.add(copy);
         toolbar.add(render);
@@ -96,8 +104,24 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
         panel.add(toolbar, BorderLayout.NORTH);
         panel.add(split, BorderLayout.CENTER);
 
-        Runnable updateState = () ->
-                status.setText(session.isRunning() ? "● Capturing" : "○ Stopped");
+        Runnable updateState = () -> {
+            if (!session.isRunning()) {
+                status.setText("○ Stopped");
+                pause.setText("Pause Recording");
+                pause.setEnabled(false);
+                stop.setEnabled(false);
+            } else if (session.isRecording()) {
+                status.setText("● Recording");
+                pause.setText("Pause Recording");
+                pause.setEnabled(true);
+                stop.setEnabled(true);
+            } else {
+                status.setText("Ⅱ Paused · traffic still passes");
+                pause.setText("Resume Recording");
+                pause.setEnabled(true);
+                stop.setEnabled(true);
+            }
+        };
         updateState.run();
         session.addStateListener(updateState);
         session.addRequestListener(request -> {
@@ -105,9 +129,68 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
             list.setSelectedIndex(model.size() - 1);
             list.ensureIndexIsVisible(model.size() - 1);
         });
+        session.addDiagnosticListener(diagnostic -> {
+            if (list.getSelectedValue() == null) {
+                curl.setText(formatDiagnostic(diagnostic));
+                curl.setCaretPosition(0);
+            }
+            showDiagnostic(project, session, diagnostic);
+        });
 
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         toolWindow.getContentManager().addContent(content);
+    }
+
+    private static String formatDiagnostic(CaptureSession.DiagnosticEvent diagnostic) {
+        StringBuilder result = new StringBuilder();
+        result.append("Autocurl diagnostic: ").append(diagnostic.summary()).append("\n\n");
+        if (diagnostic.host() != null && !diagnostic.host().isBlank()) {
+            result.append("Host: ").append(diagnostic.host()).append("\n");
+        }
+        if (diagnostic.detail() != null && !diagnostic.detail().isBlank()) {
+            result.append("Detail: ").append(diagnostic.detail()).append("\n");
+        }
+        if (diagnostic.suggested_action() != null && !diagnostic.suggested_action().isBlank()) {
+            result.append("\nNext step: ").append(diagnostic.suggested_action()).append("\n");
+        }
+        if (diagnostic.auto_applied()) {
+            result.append("\nSafe mode has already kept this host end-to-end for the current session.\n");
+        }
+        return result.toString();
+    }
+
+    private static void showDiagnostic(
+            Project project,
+            CaptureSession session,
+            CaptureSession.DiagnosticEvent diagnostic
+    ) {
+        if ("information".equalsIgnoreCase(diagnostic.severity())) return;
+        NotificationType type = "error".equalsIgnoreCase(diagnostic.severity())
+                ? NotificationType.ERROR
+                : "warning".equalsIgnoreCase(diagnostic.severity())
+                ? NotificationType.WARNING
+                : NotificationType.INFORMATION;
+        String content = diagnostic.detail() == null ? "" : diagnostic.detail();
+        if (diagnostic.suggested_action() != null && !diagnostic.suggested_action().isBlank()) {
+            content += "\n" + diagnostic.suggested_action();
+        }
+        Notification notification = NotificationGroupManager.getInstance()
+                .getNotificationGroup("Autocurl diagnostics")
+                .createNotification(diagnostic.summary(), content, type);
+        if (diagnostic.bypass_target() != null && !diagnostic.bypass_target().isBlank()) {
+            notification.addAction(NotificationAction.createSimple(
+                    "Always bypass this host and rerun",
+                    () -> {
+                        notification.expire();
+                        session.bypassAndRerun(diagnostic.bypass_target());
+                    }
+            ));
+        }
+        notification.addAction(NotificationAction.createSimple(
+                "Open Autocurl settings",
+                () -> ShowSettingsUtil.getInstance().showSettingsDialog(project, "Autocurl")
+        ));
+        notification.notify(project);
     }
 
     private static void copySelected(JBList<CaptureSession.RequestEvent> list) {
