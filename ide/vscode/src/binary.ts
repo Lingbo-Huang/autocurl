@@ -9,7 +9,9 @@ import * as vscode from "vscode";
 
 const execFileAsync = promisify(execFile);
 const repository = "Lingbo-Huang/autocurl";
-const minimumVersion = "0.2.0";
+// Keep this aligned with the extension version. Older engines may be protocol
+// compatible while still missing runtime fixes such as platform Go CA trust.
+const minimumVersion = "0.2.2";
 
 interface ReleaseAsset {
   name: string;

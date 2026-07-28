@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.2.1.vsix` with
+Install `autocurl-0.2.2.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -69,12 +69,15 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.2.1.vsix`.
+Output: `ide/vscode/autocurl-0.2.2.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
-a publisher and access token. Cursor users can install the same VSIX directly;
-an Open VSX publication can be added after the listing identity is reserved.
+a publisher and publishing credentials. Cursor users can install the same VSIX
+directly; publishing it to Open VSX makes it available to Cursor's extension
+marketplace after Cursor's synchronization and security checks. See the
+[Chinese marketplace publication runbook](marketplace-publishing.zh-CN.md) for
+the one-time account setup and automated tag workflow.
 
 ## JetBrains IDEs
 
@@ -82,7 +85,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.2.1.zip` with
+Install `autocurl-jetbrains-0.2.2.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -106,6 +109,11 @@ both the common `getEnvs/setEnvs` interface and GoLand's
 configuration that exposes no environment map receives a warning containing
 its concrete class name.
 
+Autocurl 0.2.2 also requires the matching engine version. This prevents an IDE
+from reusing the 0.2.0 engine, whose macOS environment did not include the Go
+build-process CA overlay and could produce `x509: certificate is not trusted`
+for proxied HTTPS requests.
+
 When a breakpoint is before send, select request JSON in an editor and use
 **Render Selected Request JSON as cURL**. The entire JSON document is used when
 there is no selection.
@@ -120,7 +128,7 @@ cd ide/jetbrains
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.1.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.2.zip`.
 
 For a faster local API check against an installed product:
 
@@ -132,7 +140,10 @@ AUTOCURL_LOCAL_IDE="/Applications/GoLand.app" \
 Marketplace publication uses `./gradlew publishPlugin` and the
 `PUBLISH_TOKEN` environment variable. A JetBrains vendor profile, Marketplace
 agreement, listing metadata, and JetBrains review are required before the
-public listing becomes available.
+public listing becomes available. JetBrains requires the first version to be
+uploaded manually; subsequent tagged releases are handled by the repository's
+marketplace workflow. See the
+[marketplace publication runbook](marketplace-publishing.zh-CN.md).
 
 ## Engine download and trust
 
@@ -144,8 +155,8 @@ Both plugins resolve the engine in this order:
 4. latest compatible GitHub Release.
 
 Downloads are selected by operating system and CPU architecture, and the
-archive SHA-256 must match `SHA256SUMS`. The engine must report version 0.2.0
-or newer.
+archive SHA-256 must match `SHA256SUMS`. The IDE package requires its matching
+engine version so runtime fixes cannot be bypassed by a stale managed binary.
 
 The `ready.environment` object contains generated overrides only. Parent
 environment variables and their secrets are never serialized into the JSON

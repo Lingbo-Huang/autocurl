@@ -20,7 +20,7 @@ import (
 	"github.com/Lingbo-Huang/autocurl/internal/render"
 )
 
-const Version = "0.2.1"
+const Version = "0.2.2"
 
 type stringList []string
 

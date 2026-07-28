@@ -2,7 +2,7 @@
   "name": "autocurl",
   "displayName": "Autocurl",
   "description": "Capture outbound requests from IDE debug sessions and copy complete replayable cURLs.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "lingbo-huang",
   "license": "MIT",
   "repository": {
@@ -207,6 +207,7 @@
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.6.0",
     "esbuild": "^0.25.0",
+    "ovsx": "^1.0.2",
     "typescript": "^5.8.0"
   }
 }

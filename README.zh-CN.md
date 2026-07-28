@@ -9,7 +9,7 @@
 ### VS Code / Cursor
 
 1. 从 [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases)
-   下载 `autocurl-0.2.1.vsix`。
+   下载 `autocurl-0.2.2.vsix`。
 2. 在命令面板执行 **Extensions: Install from VSIX...**。
 3. 像平时一样点击 Debug 或按 F5。
 4. 打开 **Explorer → Autocurl Requests**。点击某个请求查看完整 cURL，
@@ -20,7 +20,7 @@
 
 ### IntelliJ IDEA / GoLand / PyCharm / WebStorm
 
-1. 从 Releases 下载 `autocurl-jetbrains-0.2.1.zip`。
+1. 从 Releases 下载 `autocurl-jetbrains-0.2.2.zip`。
 2. 打开 **Settings → Plugins → ⚙ → Install Plugin from Disk**。
 3. 选择已有的 Run/Debug Configuration。
 4. 使用 **Run → Run Selected with Autocurl** 或
@@ -44,7 +44,9 @@ Go 引擎，并使用 `SHA256SUMS` 校验。如果公司网络不能访问 GitHu
 复制 cURL，不会发送网络请求。
 
 完整安装、配置、打包和发布方法见
-[IDE 插件指南](docs/ide-plugins.zh-CN.md)。
+[IDE 插件指南](docs/ide-plugins.zh-CN.md)。维护者首次上传市场、配置自动发布
+和让用户接收升级，请看
+[IDE 市场上架与自动升级](docs/marketplace-publishing.zh-CN.md)。
 
 ## 最快上手：捕获并复制某一个请求
 

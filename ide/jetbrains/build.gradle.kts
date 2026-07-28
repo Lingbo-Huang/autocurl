@@ -95,6 +95,13 @@ intellijPlatform {
             </p>
         """.trimIndent()
         changeNotes = """
+            <h3>0.2.2</h3>
+            <ul>
+              <li>Fixed Go HTTPS capture on macOS by requiring the matching engine version.</li>
+              <li>Added JetBrains Marketplace signing, custom plugin icons, and automated marketplace publishing.</li>
+              <li>Added release version guards for the engine and both IDE plugins.</li>
+            </ul>
+
             <h3>0.2.1</h3>
             <ul>
               <li>Added a bilingual quick-start guide to the plugin overview.</li>
@@ -111,9 +118,21 @@ intellijPlatform {
     publishing {
         token = providers.environmentVariable("PUBLISH_TOKEN")
     }
+    signing {
+        certificateChainFile = layout.file(
+            providers.environmentVariable("CERTIFICATE_CHAIN_FILE").map { file(it) }
+        )
+        privateKeyFile = layout.file(
+            providers.environmentVariable("PRIVATE_KEY_FILE").map { file(it) }
+        )
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
 }
 
 tasks {
+    named("verifyPluginSignature") {
+        dependsOn("signPlugin")
+    }
     wrapper {
         gradleVersion = "9.0.0"
     }
