@@ -390,6 +390,170 @@ func TestRenderDebuggerRequestEnvelope(t *testing.T) {
 	}
 }
 
+func TestRenderAdaptsGoHTTPRequestShape(t *testing.T) {
+	requestJSON := `{
+		"Method": "POST",
+		"URL": {
+			"Scheme": "https",
+			"Host": "api.example.test",
+			"Path": "/orders",
+			"RawQuery": "source=debugger"
+		},
+		"Header": {
+			"Content-Type": ["application/json"],
+			"X-Request-Id": ["go-42"]
+		},
+		"Body": {"order_id": "demo-42"}
+	}`
+	var stdout, stderr bytes.Buffer
+	exitCode := renderCommand(
+		[]string{"--request", "-"},
+		false,
+		strings.NewReader(requestJSON),
+		&stdout,
+		&stderr,
+	)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d; stderr: %s", exitCode, stderr.String())
+	}
+	for _, wanted := range []string{
+		"https://api.example.test/orders?source=debugger",
+		"--header 'X-Request-Id: go-42'",
+		`"order_id":"demo-42"`,
+	} {
+		if !strings.Contains(stdout.String(), wanted) {
+			t.Fatalf("Go request cURL does not contain %q:\n%s", wanted, stdout.String())
+		}
+	}
+}
+
+func TestRenderAdaptsAxiosRequestConfig(t *testing.T) {
+	requestJSON := `{
+		"method": "post",
+		"baseURL": "https://api.example.test/v1",
+		"url": "/orders",
+		"headers": {"Content-Type": "application/json", "X-Retry": 3},
+		"data": {"order_id": "axios-42"}
+	}`
+	var stdout, stderr bytes.Buffer
+	exitCode := renderCommand(
+		[]string{"--request", "-"},
+		false,
+		strings.NewReader(requestJSON),
+		&stdout,
+		&stderr,
+	)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d; stderr: %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "https://api.example.test/v1/orders") ||
+		!strings.Contains(stdout.String(), "--header 'X-Retry: 3'") ||
+		!strings.Contains(stdout.String(), `"order_id":"axios-42"`) {
+		t.Fatalf("unexpected Axios cURL:\n%s", stdout.String())
+	}
+}
+
+func TestRenderAdaptsJavaHttpRequestShape(t *testing.T) {
+	requestJSON := `{
+		"method": "PUT",
+		"uri": "https://api.example.test/orders/java-42",
+		"headers": {
+			"map": {
+				"Content-Type": ["application/json"],
+				"X-Request-Id": ["java-42"]
+			}
+		},
+		"body": {"state": "ready"}
+	}`
+	var stdout, stderr bytes.Buffer
+	exitCode := renderCommand(
+		[]string{"--request", "-"},
+		false,
+		strings.NewReader(requestJSON),
+		&stdout,
+		&stderr,
+	)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d; stderr: %s", exitCode, stderr.String())
+	}
+	for _, wanted := range []string{
+		"--request 'PUT'",
+		"https://api.example.test/orders/java-42",
+		"--header 'X-Request-Id: java-42'",
+		`"state":"ready"`,
+	} {
+		if !strings.Contains(stdout.String(), wanted) {
+			t.Fatalf("Java request cURL does not contain %q:\n%s", wanted, stdout.String())
+		}
+	}
+}
+
+func TestRenderAdaptsFetchOptions(t *testing.T) {
+	requestJSON := `{
+		"url": "https://api.example.test/orders/fetch-42",
+		"options": {
+			"method": "PATCH",
+			"headers": {"Content-Type": "application/json"},
+			"body": "{\"state\":\"sent\"}"
+		}
+	}`
+	var stdout, stderr bytes.Buffer
+	exitCode := renderCommand(
+		[]string{"--request", "-"},
+		false,
+		strings.NewReader(requestJSON),
+		&stdout,
+		&stderr,
+	)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d; stderr: %s", exitCode, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "--request 'PATCH'") ||
+		!strings.Contains(stdout.String(), `{"state":"sent"}`) {
+		t.Fatalf("unexpected fetch cURL:\n%s", stdout.String())
+	}
+}
+
+func TestRenderRejectsOpaqueGoRequestBody(t *testing.T) {
+	requestJSON := `{
+		"Method": "POST",
+		"URL": "https://api.example.test/orders",
+		"Header": {"Content-Type": ["application/json"]},
+		"Body": {}
+	}`
+	var stdout, stderr bytes.Buffer
+	exitCode := renderCommand(
+		[]string{"--request", "-"},
+		false,
+		strings.NewReader(requestJSON),
+		&stdout,
+		&stderr,
+	)
+	if exitCode != 2 {
+		t.Fatalf("exit code = %d, want 2", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "Go http.Request Body is a stream") {
+		t.Fatalf("opaque Go Body error is not actionable:\n%s", stderr.String())
+	}
+}
+
+func TestRenderPrintsLanguageTemplate(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	exitCode := Run(
+		[]string{"render", "--template", "python"},
+		&stdout,
+		&stderr,
+	)
+	if exitCode != 0 {
+		t.Fatalf("exit code = %d; stderr: %s", exitCode, stderr.String())
+	}
+	for _, wanted := range []string{`"method"`, `"url"`, `"headers"`, `"body"`} {
+		if !strings.Contains(stdout.String(), wanted) {
+			t.Fatalf("Python template does not contain %q:\n%s", wanted, stdout.String())
+		}
+	}
+}
+
 func TestRenderFlagsWriteCurlFile(t *testing.T) {
 	tempDirectory := t.TempDir()
 	bodyPath := filepath.Join(tempDirectory, "body.json")
