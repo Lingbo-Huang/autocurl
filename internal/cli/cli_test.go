@@ -72,6 +72,25 @@ func TestDoctorJSON(t *testing.T) {
 	}
 }
 
+func TestNodeEnvironmentProxyCompatibility(t *testing.T) {
+	tests := []struct {
+		version string
+		want    bool
+	}{
+		{version: "v22.20.0", want: false},
+		{version: "v22.21.0", want: true},
+		{version: "v24.4.1", want: false},
+		{version: "v24.5.0", want: true},
+		{version: "v25.0.0", want: true},
+		{version: "not-a-version", want: false},
+	}
+	for _, test := range tests {
+		if got := nodeSupportsEnvironmentProxy(test.version); got != test.want {
+			t.Fatalf("node %q proxy support = %v, want %v", test.version, got, test.want)
+		}
+	}
+}
+
 func TestRunRejectsInvalidReplayHeader(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	exitCode := Run(

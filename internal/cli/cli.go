@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -89,18 +90,41 @@ Run "autocurl <command> --help" for details.
 
 func doctor(jsonOutput bool, stdout io.Writer) int {
 	type executable struct {
-		Name      string `json:"name"`
-		Available bool   `json:"available"`
-		Path      string `json:"path,omitempty"`
+		Name          string `json:"name"`
+		Available     bool   `json:"available"`
+		Path          string `json:"path,omitempty"`
+		Version       string `json:"version,omitempty"`
+		Compatibility string `json:"compatibility"`
+		Note          string `json:"note,omitempty"`
 	}
 	names := []string{"go", "python3", "node", "java", "keytool"}
 	executables := make([]executable, 0, len(names))
 	for _, name := range names {
 		path, err := exec.LookPath(name)
+		version := ""
+		compatibility := "unavailable"
+		note := ""
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			version = executableVersion(ctx, name, path)
+			cancel()
+			compatibility = "supported"
+			if name == "node" && !nodeSupportsEnvironmentProxy(version) {
+				compatibility = "client-dependent"
+				note = "Built-in environment proxying requires Node 22.21+ or 24.5+; older Node clients need explicit proxy configuration."
+			}
+			if name == "keytool" {
+				compatibility = "support-tool"
+				note = "Used to create the temporary Java truststore."
+			}
+		}
 		executables = append(executables, executable{
-			Name:      name,
-			Available: err == nil,
-			Path:      path,
+			Name:          name,
+			Available:     err == nil,
+			Path:          path,
+			Version:       version,
+			Compatibility: compatibility,
+			Note:          note,
 		})
 	}
 	result := struct {
@@ -119,8 +143,9 @@ func doctor(jsonOutput bool, stdout io.Writer) int {
 		Notes: []string{
 			"Go and Python usually honor the injected proxy and CA environment variables.",
 			"Java support uses proxy system properties and a temporary PKCS12 truststore when keytool is available.",
-			"HTTP/1.1, HTTP/2, TLS/h2c gRPC, and classic ws/wss proxying are enabled.",
-			"Node.js environment-proxy support depends on the Node version and HTTP client.",
+			"Node.js built-in environment proxying requires Node 22.21+ or 24.5+; custom agents and older clients may ignore it.",
+			"Safe mode keeps detected mTLS, pinned/untrusted TLS, and incompatible TLS connections end-to-end.",
+			"HTTP/1.1, HTTP/2, TLS/h2c gRPC, and classic ws/wss handshake proxying are enabled.",
 		},
 	}
 
@@ -135,14 +160,57 @@ func doctor(jsonOutput bool, stdout io.Writer) int {
 		status := "missing"
 		if executable.Available {
 			status = executable.Path
+			if executable.Version != "" {
+				status += " · " + executable.Version
+			}
+			status += " · " + executable.Compatibility
 		}
 		fmt.Fprintf(stdout, "  %-8s %s\n", executable.Name, status)
+		if executable.Note != "" {
+			fmt.Fprintf(stdout, "           %s\n", executable.Note)
+		}
 	}
 	fmt.Fprintln(stdout)
 	for _, note := range result.Notes {
 		fmt.Fprintf(stdout, "- %s\n", note)
 	}
 	return 0
+}
+
+func executableVersion(ctx context.Context, name, path string) string {
+	arguments := []string{"--version"}
+	if name == "go" {
+		arguments = []string{"version"}
+	} else if name == "java" {
+		arguments = []string{"-version"}
+	} else if name == "keytool" {
+		return ""
+	}
+	output, err := exec.CommandContext(ctx, path, arguments...).CombinedOutput()
+	if err != nil && len(output) == 0 {
+		return ""
+	}
+	line, _, _ := strings.Cut(strings.TrimSpace(string(output)), "\n")
+	return strings.TrimSpace(line)
+}
+
+func nodeSupportsEnvironmentProxy(version string) bool {
+	version = strings.TrimSpace(version)
+	if strings.HasPrefix(version, "node ") {
+		version = strings.TrimSpace(strings.TrimPrefix(version, "node "))
+	}
+	version = strings.TrimPrefix(version, "v")
+	var major, minor int
+	if count, _ := fmt.Sscanf(version, "%d.%d", &major, &minor); count != 2 {
+		return false
+	}
+	if major == 22 {
+		return minor >= 21
+	}
+	if major == 24 {
+		return minor >= 5
+	}
+	return major >= 25
 }
 
 func runCommand(arguments []string, globalJSON bool, stdout, stderr io.Writer) int {
