@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import * as vscode from "vscode";
 import { BinaryManager } from "./binary";
-import { CaptureSession, RequestEvent } from "./session";
+import { CaptureSession, DiagnosticEvent, RequestEvent } from "./session";
 
 class RequestItem extends vscode.TreeItem {
   constructor(readonly request: RequestEvent) {
@@ -62,6 +62,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const binary = new BinaryManager(context, output);
   const session = new CaptureSession(binary, output);
   const provider = new RequestsProvider(session);
+  let lastLaunch:
+    | { folder: vscode.WorkspaceFolder | undefined; configuration: vscode.DebugConfiguration }
+    | undefined;
 
   context.subscriptions.push(
     output,
@@ -76,8 +79,10 @@ export function activate(context: vscode.ExtensionContext): void {
       }, output);
     }),
     vscode.commands.registerCommand("autocurl.stop", async () => {
-      await session.stop();
+      await session.stopSession();
     }),
+    vscode.commands.registerCommand("autocurl.pause", () => session.pause()),
+    vscode.commands.registerCommand("autocurl.resume", () => session.resume()),
     vscode.commands.registerCommand("autocurl.clear", () => session.clear()),
     vscode.commands.registerCommand("autocurl.copyLast", async () => {
       const request = session.last();
@@ -97,7 +102,7 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       await vscode.window.showTextDocument(document, { preview: true });
     }),
-    vscode.commands.registerCommand("autocurl.renderSelection", async () => {
+    vscode.commands.registerCommand("autocurl.generateFromRequestJson", async () => {
       await runWithErrors(async () => {
         const editor = vscode.window.activeTextEditor;
         let requestJSON = editor?.document.getText(editor.selection).trim() ?? "";
@@ -125,6 +130,15 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showInformationMessage("Rendered cURL copied to clipboard.");
       }, output);
     }),
+    vscode.commands.registerCommand("autocurl.renderSelection", async () => {
+      await vscode.commands.executeCommand("autocurl.generateFromRequestJson");
+    }),
+    vscode.commands.registerCommand("autocurl.openQuickStart", async () => {
+      const document = await vscode.workspace.openTextDocument(
+        vscode.Uri.joinPath(context.extensionUri, "README.md"),
+      );
+      await vscode.window.showTextDocument(document, { preview: true });
+    }),
     vscode.commands.registerCommand("autocurl.downloadBinary", async () => {
       await runWithErrors(async () => {
         await binary.resolve(true);
@@ -133,9 +147,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.debug.registerDebugConfigurationProvider("*", {
       async resolveDebugConfiguration(
-        _folder: vscode.WorkspaceFolder | undefined,
+        folder: vscode.WorkspaceFolder | undefined,
         configuration: vscode.DebugConfiguration,
       ): Promise<vscode.DebugConfiguration> {
+        lastLaunch = {
+          folder,
+          configuration: {
+            ...configuration,
+            env: { ...(configuration.env as Record<string, string> | undefined) },
+          },
+        };
         const settings = vscode.workspace.getConfiguration("autocurl");
         if (!settings.get<boolean>("injectDebugEnvironment", true)) {
           return configuration;
@@ -158,7 +179,60 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       },
     }),
+    session.onDidDiagnostic((diagnostic) => {
+      void handleDiagnostic(diagnostic, session, output, lastLaunch);
+    }),
   );
+}
+
+async function handleDiagnostic(
+  diagnostic: DiagnosticEvent,
+  session: CaptureSession,
+  output: vscode.OutputChannel,
+  lastLaunch:
+    | { folder: vscode.WorkspaceFolder | undefined; configuration: vscode.DebugConfiguration }
+    | undefined,
+): Promise<void> {
+  if (diagnostic.severity === "information") {
+    vscode.window.setStatusBarMessage(`Autocurl: ${diagnostic.summary}`, 5000);
+    return;
+  }
+  const bypassAction = diagnostic.bypass_target
+    ? "Always bypass this host and restart"
+    : undefined;
+  const actions = [bypassAction, "Open Autocurl Output"].filter(
+    (value): value is string => value !== undefined,
+  );
+  const message = diagnostic.suggested_action
+    ? `${diagnostic.summary}. ${diagnostic.suggested_action}`
+    : diagnostic.summary;
+  const selected = diagnostic.severity === "error"
+    ? await vscode.window.showErrorMessage(message, ...actions)
+    : await vscode.window.showWarningMessage(message, ...actions);
+
+  if (selected === "Open Autocurl Output") {
+    output.show(true);
+    return;
+  }
+  if (selected !== bypassAction || !diagnostic.bypass_target) {
+    return;
+  }
+  const settings = vscode.workspace.getConfiguration("autocurl");
+  const targets = settings.get<string[]>("bypassTargets", []);
+  if (!targets.includes(diagnostic.bypass_target)) {
+    const scope = vscode.workspace.workspaceFile || vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await settings.update(
+      "bypassTargets",
+      [...targets, diagnostic.bypass_target],
+      scope,
+    );
+  }
+  await session.stopSession();
+  if (lastLaunch) {
+    await vscode.debug.startDebugging(lastLaunch.folder, lastLaunch.configuration);
+  }
 }
 
 function renderRequest(executable: string, requestJSON: string): Promise<string> {
