@@ -363,9 +363,9 @@ func (p *Proxy) tlsDecision(address string) TLSProbeResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	decision := p.tlsProbe(ctx, connectAddress(address))
-	if decision.Bypass {
+	if decision.Bypass || decision.Code != "upstream_unreachable" {
 		if decision.Code == "" {
-			decision.Code = "tls_interception_unsupported"
+			decision.Code = "tls_interception_supported"
 		}
 		p.tlsMu.Lock()
 		p.tlsDecisions[address] = decision
