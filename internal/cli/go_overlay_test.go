@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,6 +24,63 @@ func TestAddGoTrustOverlay(t *testing.T) {
 		t.Fatalf("addGoTrustOverlay returned an error: %v", err)
 	}
 	if !strings.Contains(note, runtime.GOOS) {
+		t.Fatalf("note = %q", note)
+	}
+	if !strings.Contains(environmentValue(environment, "GOFLAGS"), "-overlay=") {
+		t.Fatalf("GOFLAGS does not contain an overlay: %q", environmentValue(environment, "GOFLAGS"))
+	}
+	if got := environmentValue(environment, "AUTOCURL_CA_FILE"); got != caPath {
+		t.Fatalf("AUTOCURL_CA_FILE = %q, want %q", got, caPath)
+	}
+}
+
+func TestDiscoverGoExecutableFromLoginShellWithGUIPath(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("regression covers macOS GUI applications with a minimal PATH")
+	}
+
+	tempDirectory := t.TempDir()
+	goRoot := filepath.Join(tempDirectory, "go-root")
+	rootSource := filepath.Join(goRoot, "src", "crypto", "x509", "root_darwin.go")
+	if err := os.MkdirAll(filepath.Dir(rootSource), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rootSource, []byte("package x509\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fakeGo := filepath.Join(tempDirectory, "go")
+	goScript := "#!/bin/sh\nprintf '%s\\n' \"$FAKE_GOROOT\"\n"
+	if err := os.WriteFile(fakeGo, []byte(goScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fakeShell := filepath.Join(tempDirectory, "fake-shell")
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' %q\n", fakeGo)
+	if err := os.WriteFile(fakeShell, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	environment := []string{
+		"HOME=" + tempDirectory,
+		"PATH=/usr/bin:/bin",
+		"SHELL=" + fakeShell,
+		"FAKE_GOROOT=" + goRoot,
+	}
+	caPath := filepath.Join(tempDirectory, "ca.pem")
+	if err := os.WriteFile(caPath, []byte("test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	environment, note, err := addGoTrustOverlayWithCandidates(
+		environment,
+		tempDirectory,
+		caPath,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("addGoTrustOverlayWithCandidates returned an error: %v", err)
+	}
+	if !strings.Contains(note, "enabled for darwin") {
 		t.Fatalf("note = %q", note)
 	}
 	if !strings.Contains(environmentValue(environment, "GOFLAGS"), "-overlay=") {

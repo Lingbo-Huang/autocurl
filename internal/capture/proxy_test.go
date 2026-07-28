@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -658,6 +659,245 @@ func TestProxyMarksTruncatedRequestBody(t *testing.T) {
 	}
 	if got := string(event.Body); got != "1234" {
 		t.Fatalf("captured body = %q, want 1234", got)
+	}
+}
+
+func TestProxyPauseKeepsForwardingWithoutRecording(t *testing.T) {
+	upstreamCalls := make(chan string, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		upstreamCalls <- request.URL.Path
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	authority, _ := NewAuthority()
+	events := make(chan Event, 2)
+	proxy, _ := NewProxy(Options{
+		Authority: authority,
+		OnEvent:   func(event Event) { events <- event },
+	})
+	address, _ := proxy.Start()
+	defer proxy.Close()
+
+	proxy.SetRecording(false)
+	client := proxyClient(t, address, nil)
+	response, err := client.Get(upstream.URL + "/paused")
+	if err != nil {
+		t.Fatalf("paused proxy stopped forwarding: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("paused proxy status = %d, want %d", response.StatusCode, http.StatusNoContent)
+	}
+	select {
+	case path := <-upstreamCalls:
+		if path != "/paused" {
+			t.Fatalf("paused upstream path = %q", path)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("paused proxy did not forward the request")
+	}
+	select {
+	case event := <-events:
+		t.Fatalf("paused proxy unexpectedly recorded an event: %#v", event)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	proxy.SetRecording(true)
+	response, err = client.Get(upstream.URL + "/resumed")
+	if err != nil {
+		t.Fatalf("resumed proxy request failed: %v", err)
+	}
+	response.Body.Close()
+	event := waitForRequestEvent(t, events)
+	if event.URL != upstream.URL+"/resumed" {
+		t.Fatalf("resumed event URL = %q", event.URL)
+	}
+}
+
+func TestSafeModeTunnelsTLSWhenProbeRequiresBypass(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	authority, _ := NewAuthority()
+	events := make(chan Event, 2)
+	diagnostics := make(chan Diagnostic, 2)
+	proxy, _ := NewProxy(Options{
+		Authority: authority,
+		Mode:      ModeSafe,
+		OnEvent:   func(event Event) { events <- event },
+		OnDiagnostic: func(diagnostic Diagnostic) {
+			diagnostics <- diagnostic
+		},
+		TLSProbe: func(context.Context, string) TLSProbeResult {
+			return TLSProbeResult{
+				Bypass: true,
+				Code:   "mtls_detected",
+				Detail: "the upstream requested a client certificate",
+			}
+		},
+	})
+	address, _ := proxy.Start()
+	defer proxy.Close()
+
+	proxyURL, _ := url.Parse("http://" + address)
+	transport := upstream.Client().Transport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(proxyURL)
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+	response, err := client.Get(upstream.URL + "/mtls-compatible")
+	if err != nil {
+		t.Fatalf("safe TLS tunnel failed: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("safe TLS tunnel status = %d", response.StatusCode)
+	}
+
+	select {
+	case diagnostic := <-diagnostics:
+		if diagnostic.Code != "mtls_detected" || diagnostic.BypassTarget == "" ||
+			!diagnostic.AutoApplied {
+			t.Fatalf("safe-mode diagnostic = %#v", diagnostic)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("safe mode emitted no bypass diagnostic")
+	}
+	select {
+	case event := <-events:
+		t.Fatalf("safe tunneled request should not be captured: %#v", event)
+	case <-time.After(150 * time.Millisecond):
+	}
+}
+
+func TestStrictModeDoesNotUseTLSCompatibilityProbe(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	authority, _ := NewAuthority()
+	probeCalls := 0
+	events := make(chan Event, 2)
+	proxy, _ := NewProxy(Options{
+		Authority: authority,
+		Mode:      ModeStrict,
+		OnEvent:   func(event Event) { events <- event },
+		TLSProbe: func(context.Context, string) TLSProbeResult {
+			probeCalls++
+			return TLSProbeResult{Bypass: true, Code: "mtls_detected"}
+		},
+		Transport: &http.Transport{
+			ForceAttemptHTTP2: false,
+			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true}, // Test-only upstream certificate.
+		},
+	})
+	address, _ := proxy.Start()
+	defer proxy.Close()
+
+	roots := x509.NewCertPool()
+	roots.AppendCertsFromPEM(authority.PEM())
+	client := proxyClient(t, address, roots)
+	response, err := client.Get(upstream.URL + "/strict")
+	if err != nil {
+		t.Fatalf("strict intercepted request failed: %v", err)
+	}
+	response.Body.Close()
+	event := waitForRequestEvent(t, events)
+	if event.Status != http.StatusNoContent {
+		t.Fatalf("strict event status = %d", event.Status)
+	}
+	if probeCalls != 0 {
+		t.Fatalf("strict mode called compatibility probe %d times", probeCalls)
+	}
+}
+
+func TestSafeModeBypassesHostAfterClientRejectsCaptureCA(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	authority, _ := NewAuthority()
+	diagnostics := make(chan Diagnostic, 2)
+	proxy, _ := NewProxy(Options{
+		Authority: authority,
+		Mode:      ModeSafe,
+		OnDiagnostic: func(diagnostic Diagnostic) {
+			diagnostics <- diagnostic
+		},
+		TLSProbe: func(context.Context, string) TLSProbeResult {
+			return TLSProbeResult{}
+		},
+	})
+	address, _ := proxy.Start()
+	defer proxy.Close()
+
+	proxyURL, _ := url.Parse("http://" + address)
+	transport := upstream.Client().Transport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(proxyURL)
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+
+	if response, err := client.Get(upstream.URL + "/pinned"); err == nil {
+		response.Body.Close()
+		t.Fatal("first request unexpectedly trusted the capture CA")
+	}
+	select {
+	case diagnostic := <-diagnostics:
+		if diagnostic.Code != "client_rejected_ca" || !diagnostic.AutoApplied ||
+			!diagnostic.RetryRequired {
+			t.Fatalf("client rejection diagnostic = %#v", diagnostic)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("safe mode emitted no client-rejection diagnostic")
+	}
+
+	response, err := client.Get(upstream.URL + "/pinned")
+	if err != nil {
+		t.Fatalf("safe mode did not tunnel the retry: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("safe retry status = %d", response.StatusCode)
+	}
+}
+
+func TestDiagnoseTransportErrorDistinguishesFailureClasses(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		code string
+	}{
+		{
+			name: "mutual TLS",
+			err:  errors.New("remote error: tls: certificate required"),
+			code: "mtls_detected",
+		},
+		{
+			name: "connection refused",
+			err:  errors.New("dial tcp 127.0.0.1:8080: connect: connection refused"),
+			code: "upstream_connection_refused",
+		},
+		{
+			name: "DNS",
+			err:  errors.New("dial tcp: lookup api.invalid: no such host"),
+			code: "dns_failed",
+		},
+		{
+			name: "timeout",
+			err:  context.DeadlineExceeded,
+			code: "upstream_timeout",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			diagnostic := diagnoseTransportError("https://api.internal.example/orders", test.err)
+			if diagnostic.Code != test.code || diagnostic.Host != "api.internal.example" ||
+				diagnostic.SuggestedAction == "" {
+				t.Fatalf("diagnostic = %#v", diagnostic)
+			}
+		})
 	}
 }
 

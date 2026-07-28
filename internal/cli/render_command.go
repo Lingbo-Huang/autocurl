@@ -42,19 +42,11 @@ func (headers *flexibleHeaders) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("invalid header name %q", name)
 		}
 		name = http.CanonicalHeaderKey(name)
-		var single string
-		if err := json.Unmarshal(rawValue, &single); err == nil {
-			if !httpguts.ValidHeaderFieldValue(single) {
-				return fmt.Errorf("header %q contains an invalid value", name)
-			}
-			decoded.Add(name, single)
-			continue
+		values, err := decodeHeaderValues(rawValue)
+		if err != nil {
+			return fmt.Errorf("header %q %w", name, err)
 		}
-		var multiple []string
-		if err := json.Unmarshal(rawValue, &multiple); err != nil {
-			return fmt.Errorf("header %q must be a string or string array", name)
-		}
-		for _, value := range multiple {
+		for _, value := range values {
 			if !httpguts.ValidHeaderFieldValue(value) {
 				return fmt.Errorf("header %q contains an invalid value", name)
 			}
@@ -63,6 +55,43 @@ func (headers *flexibleHeaders) UnmarshalJSON(data []byte) error {
 	}
 	*headers = flexibleHeaders(decoded)
 	return nil
+}
+
+func decodeHeaderValues(data json.RawMessage) ([]string, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, fmt.Errorf("must contain JSON header values: %w", err)
+	}
+	toText := func(item any) (string, bool) {
+		switch typed := item.(type) {
+		case string:
+			return typed, true
+		case json.Number:
+			return typed.String(), true
+		case bool:
+			return fmt.Sprintf("%t", typed), true
+		default:
+			return "", false
+		}
+	}
+	if text, ok := toText(value); ok {
+		return []string{text}, nil
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("must be a string, number, boolean, or array of those values")
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := toText(item)
+		if !ok {
+			return nil, fmt.Errorf("array contains a non-scalar value")
+		}
+		result = append(result, text)
+	}
+	return result, nil
 }
 
 func renderCommand(arguments []string, globalJSON bool, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -76,6 +105,7 @@ func renderCommand(arguments []string, globalJSON bool, stdin io.Reader, stdout,
 	protocol := flags.String("protocol", "", "HTTP/1.0, HTTP/1.1, or HTTP/2")
 	body := flags.String("body", "", "literal request body")
 	bodyFile := flags.String("body-file", "", "request body file; use - for stdin")
+	template := flags.String("template", "", "print a request JSON template: generic, go, java, python, node, or fetch")
 	showSecrets := flags.Bool("show-secrets", false, "include credentials and sensitive fields (unsafe)")
 	copyCurl := flags.Bool("copy", false, "copy the generated cURL to the clipboard")
 	outputPath := flags.String("output", "", "write the generated cURL to this file")
@@ -119,6 +149,35 @@ Examples:
 	}
 	if len(flags.Args()) != 0 {
 		return writeRenderError(*jsonOutput, stdout, stderr, "unexpected positional arguments")
+	}
+	if *template != "" {
+		if *requestFile != "" || *requestURL != "" || *method != "" || *protocol != "" ||
+			len(headerValues) > 0 || *body != "" || *bodyFile != "" {
+			return writeRenderError(
+				*jsonOutput, stdout, stderr,
+				"--template cannot be combined with request input options",
+			)
+		}
+		value, err := renderRequestTemplate(*template)
+		if err != nil {
+			return writeRenderError(*jsonOutput, stdout, stderr, err.Error())
+		}
+		if *jsonOutput {
+			_ = json.NewEncoder(stdout).Encode(struct {
+				SchemaVersion string          `json:"schema_version"`
+				Type          string          `json:"type"`
+				Language      string          `json:"language"`
+				Request       json.RawMessage `json:"request"`
+			}{
+				SchemaVersion: "1",
+				Type:          "template",
+				Language:      strings.ToLower(strings.TrimSpace(*template)),
+				Request:       value,
+			})
+		} else {
+			fmt.Fprintln(stdout, string(value))
+		}
+		return 0
 	}
 
 	var request curlrender.Request
@@ -215,13 +274,8 @@ func requestFromEnvelopeFile(path string, stdin io.Reader) (curlrender.Request, 
 	if err != nil {
 		return curlrender.Request{}, err
 	}
-	var envelope renderEnvelope
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&envelope); err != nil {
-		return curlrender.Request{}, fmt.Errorf("decode request JSON: %w", err)
-	}
-	if err := ensureJSONEOF(decoder); err != nil {
+	envelope, err := decodeRenderEnvelope(data)
+	if err != nil {
 		return curlrender.Request{}, err
 	}
 
@@ -248,6 +302,210 @@ func requestFromEnvelopeFile(path string, stdin io.Reader) (curlrender.Request, 
 		Headers:  headers,
 		Body:     body,
 	}, nil
+}
+
+func decodeRenderEnvelope(data []byte) (renderEnvelope, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return renderEnvelope{}, fmt.Errorf("decode request JSON: %w", err)
+	}
+	if wrapped, ok := root["request"]; ok {
+		var nested map[string]json.RawMessage
+		if err := json.Unmarshal(wrapped, &nested); err != nil {
+			return renderEnvelope{}, fmt.Errorf("request must be a JSON object: %w", err)
+		}
+		root = nested
+	}
+
+	if options, ok := root["options"]; ok {
+		var nested map[string]json.RawMessage
+		if err := json.Unmarshal(options, &nested); err != nil {
+			return renderEnvelope{}, fmt.Errorf("options must be a JSON object: %w", err)
+		}
+		for _, name := range []string{"method", "headers", "body"} {
+			if _, exists := root[name]; !exists {
+				if value, found := nested[name]; found {
+					root[name] = value
+				}
+			}
+		}
+	}
+
+	var envelope renderEnvelope
+	if raw, ok := firstJSONField(root, "method", "Method"); ok {
+		if err := json.Unmarshal(raw, &envelope.Method); err != nil {
+			return renderEnvelope{}, fmt.Errorf("method must be a string")
+		}
+	}
+	if raw, ok := firstJSONField(root, "protocol", "Protocol"); ok {
+		if err := json.Unmarshal(raw, &envelope.Protocol); err != nil {
+			return renderEnvelope{}, fmt.Errorf("protocol must be a string")
+		}
+	}
+	if raw, ok := firstJSONField(root, "url", "uri", "URL", "URI"); ok {
+		requestURL, err := decodeDebuggerURL(raw)
+		if err != nil {
+			return renderEnvelope{}, err
+		}
+		envelope.URL = requestURL
+	}
+	if raw, ok := firstJSONField(root, "baseURL", "baseUrl"); ok && envelope.URL != "" {
+		var baseURL string
+		if err := json.Unmarshal(raw, &baseURL); err != nil {
+			return renderEnvelope{}, fmt.Errorf("baseURL must be a string")
+		}
+		envelope.URL = combineDebuggerURL(baseURL, envelope.URL)
+	}
+	if raw, ok := firstJSONField(root, "headers", "Header", "Headers"); ok {
+		headers, err := decodeDebuggerHeaders(raw)
+		if err != nil {
+			return renderEnvelope{}, err
+		}
+		envelope.Headers = headers
+	}
+	if raw, ok := firstJSONField(root, "body_base64", "bodyBase64"); ok {
+		if err := json.Unmarshal(raw, &envelope.BodyBase64); err != nil {
+			return renderEnvelope{}, fmt.Errorf("body_base64 must be a string")
+		}
+	}
+	if raw, ok := root["Body"]; ok &&
+		bytes.Equal(bytes.TrimSpace(raw), []byte("{}")) &&
+		(root["Method"] != nil || root["URL"] != nil || root["Header"] != nil) {
+		return renderEnvelope{}, fmt.Errorf(
+			"Go http.Request Body is a stream and could not be extracted; " +
+				"copy the buffered payload into a lowercase \"body\" field",
+		)
+	}
+	if raw, ok := firstJSONField(root, "body", "Body", "data", "json", "payload"); ok {
+		envelope.Body = append(json.RawMessage(nil), raw...)
+	}
+	return envelope, nil
+}
+
+func firstJSONField(
+	values map[string]json.RawMessage,
+	names ...string,
+) (json.RawMessage, bool) {
+	for _, name := range names {
+		if value, ok := values[name]; ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func decodeDebuggerURL(raw json.RawMessage) (string, error) {
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return strings.TrimSpace(text), nil
+	}
+	var value struct {
+		Scheme   string `json:"Scheme"`
+		Host     string `json:"Host"`
+		Path     string `json:"Path"`
+		RawPath  string `json:"RawPath"`
+		RawQuery string `json:"RawQuery"`
+		Fragment string `json:"Fragment"`
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", fmt.Errorf("url must be a string or a Go url.URL-shaped object")
+	}
+	if value.Scheme == "" || value.Host == "" {
+		return "", fmt.Errorf("Go URL object must contain Scheme and Host")
+	}
+	return (&url.URL{
+		Scheme:   value.Scheme,
+		Host:     value.Host,
+		Path:     value.Path,
+		RawPath:  value.RawPath,
+		RawQuery: value.RawQuery,
+		Fragment: value.Fragment,
+	}).String(), nil
+}
+
+func combineDebuggerURL(baseURL, requestURL string) string {
+	requestURL = strings.TrimSpace(requestURL)
+	if parsed, err := url.Parse(requestURL); err == nil && parsed.IsAbs() {
+		return requestURL
+	}
+	return strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/" +
+		strings.TrimLeft(requestURL, "/")
+}
+
+func decodeDebuggerHeaders(raw json.RawMessage) (flexibleHeaders, error) {
+	var wrapper map[string]json.RawMessage
+	if json.Unmarshal(raw, &wrapper) == nil {
+		if nested, ok := firstJSONField(wrapper, "map", "Map"); ok {
+			raw = nested
+		}
+	}
+	var headers flexibleHeaders
+	if err := json.Unmarshal(raw, &headers); err != nil {
+		return nil, err
+	}
+	return headers, nil
+}
+
+func renderRequestTemplate(language string) (json.RawMessage, error) {
+	var template string
+	switch strings.ToLower(strings.TrimSpace(language)) {
+	case "generic":
+		template = `{
+  "method": "POST",
+  "url": "https://api.example.com/orders",
+  "protocol": "HTTP/2",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"order_id": "demo-42"}
+}`
+	case "go":
+		template = `{
+  "Method": "POST",
+  "URL": {"Scheme": "https", "Host": "api.example.com", "Path": "/orders"},
+  "Header": {"Content-Type": ["application/json"]},
+  "Body": {"order_id": "demo-42"}
+}`
+	case "java":
+		template = `{
+  "method": "POST",
+  "uri": "https://api.example.com/orders",
+  "headers": {"map": {"Content-Type": ["application/json"]}},
+  "body": {"order_id": "demo-42"}
+}`
+	case "python":
+		template = `{
+  "method": "POST",
+  "url": "https://api.example.com/orders",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"order_id": "demo-42"}
+}`
+	case "node":
+		template = `{
+  "method": "post",
+  "baseURL": "https://api.example.com",
+  "url": "/orders",
+  "headers": {"Content-Type": "application/json"},
+  "data": {"order_id": "demo-42"}
+}`
+	case "fetch":
+		template = `{
+  "url": "https://api.example.com/orders",
+  "options": {
+    "method": "POST",
+    "headers": {"Content-Type": "application/json"},
+    "body": "{\"order_id\":\"demo-42\"}"
+  }
+}`
+	default:
+		return nil, fmt.Errorf(
+			"unknown template %q; use generic, go, java, python, node, or fetch",
+			language,
+		)
+	}
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, []byte(template), "", "  "); err != nil {
+		return nil, err
+	}
+	return pretty.Bytes(), nil
 }
 
 func requestFromFlags(

@@ -46,15 +46,21 @@ abstract class RunWithAutocurlAction extends AnAction {
         if (!RunConfigurationEnvironment.supports(configuration)) {
             Messages.showWarningDialog(
                     project,
-                    "Autocurl cannot inject environment variables into this Run Configuration type:\n"
+                    "This Run Configuration type does not expose environment variables:\n"
                             + configuration.getClass().getName()
-                            + "\n\nPlease report this class name at github.com/Lingbo-Huang/autocurl/issues.",
+                            + "\n\nSupported standard configurations include Java, Go, Python, Node.js, "
+                            + "Gradle, Maven, and most shell configurations."
+                            + "\n\nFallbacks:"
+                            + "\n1. Create a standard language Run/Debug configuration;"
+                            + "\n2. Run `autocurl run --all -- <command>` and attach the debugger;"
+                            + "\n3. Report the class name above so an adapter can be added.",
                     "Unsupported Run Configuration"
             );
             return;
         }
 
         CaptureSession session = CaptureSession.getInstance(project);
+        session.setRerunAction(() -> run(project, executor));
         session.start().whenComplete((ready, error) -> ApplicationManager.getApplication().invokeLater(() -> {
             if (error != null) {
                 Messages.showErrorDialog(project, rootMessage(error), "Autocurl Could Not Start");
@@ -64,16 +70,28 @@ abstract class RunWithAutocurlAction extends AnAction {
                     configuration,
                     session.mergeEnvironment(RunConfigurationEnvironment.read(configuration), ready)
             )) {
-                session.stop();
+                session.stopSession();
                 Messages.showErrorDialog(
                         project,
-                        "Autocurl could not update environment variables for "
+                        "Autocurl could not update the temporary Run/Debug settings for "
                                 + configuration.getClass().getName() + ".",
                         "Autocurl Could Not Start"
                 );
                 return;
             }
-            ProgramRunnerUtil.executeConfiguration(project, temporary, executor);
+            session.expectProfile(configuration);
+            try {
+                ProgramRunnerUtil.executeConfiguration(project, temporary, executor);
+            } catch (RuntimeException launchError) {
+                session.cancelExpectedProfile(configuration);
+                session.stopSession();
+                Messages.showErrorDialog(
+                        project,
+                        rootMessage(launchError),
+                        "Autocurl Could Not Start the Application"
+                );
+                return;
+            }
             ToolWindow window = ToolWindowManager.getInstance(project).getToolWindow("Autocurl");
             if (window != null) window.show();
         }));

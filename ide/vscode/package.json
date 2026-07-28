@@ -2,12 +2,22 @@
   "name": "autocurl",
   "displayName": "Autocurl",
   "description": "Capture outbound requests from IDE debug sessions and copy complete replayable cURLs.",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "lingbo-huang",
   "license": "MIT",
+  "pricing": "Free",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#24243A",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Lingbo-Huang/autocurl.git"
+  },
+  "homepage": "https://github.com/Lingbo-Huang/autocurl#readme",
+  "bugs": {
+    "url": "https://github.com/Lingbo-Huang/autocurl/issues"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -29,8 +39,11 @@
     "onView:autocurl.requests",
     "onCommand:autocurl.start",
     "onCommand:autocurl.stop",
+    "onCommand:autocurl.pause",
+    "onCommand:autocurl.resume",
     "onCommand:autocurl.copyLast",
-    "onCommand:autocurl.renderSelection",
+    "onCommand:autocurl.generateFromRequestJson",
+    "onCommand:autocurl.runDiagnostics",
     "onDebug"
   ],
   "contributes": {
@@ -41,7 +54,15 @@
       },
       {
         "command": "autocurl.stop",
-        "title": "Autocurl: Stop Capture"
+        "title": "Autocurl: Stop Session"
+      },
+      {
+        "command": "autocurl.pause",
+        "title": "Autocurl: Pause Recording"
+      },
+      {
+        "command": "autocurl.resume",
+        "title": "Autocurl: Resume Recording"
       },
       {
         "command": "autocurl.copyLast",
@@ -60,8 +81,16 @@
         "title": "Autocurl: Clear Requests"
       },
       {
-        "command": "autocurl.renderSelection",
-        "title": "Autocurl: Render Selected Request JSON"
+        "command": "autocurl.generateFromRequestJson",
+        "title": "Autocurl: Generate cURL from Request JSON"
+      },
+      {
+        "command": "autocurl.openQuickStart",
+        "title": "Autocurl: Quick Start / 使用说明"
+      },
+      {
+        "command": "autocurl.runDiagnostics",
+        "title": "Autocurl: Run Environment Check"
       },
       {
         "command": "autocurl.downloadBinary",
@@ -90,6 +119,19 @@
           "type": "boolean",
           "default": true,
           "description": "Merge capture proxy and temporary CA variables into IDE debug configurations."
+        },
+        "autocurl.captureMode": {
+          "type": "string",
+          "default": "safe",
+          "enum": [
+            "safe",
+            "strict"
+          ],
+          "enumDescriptions": [
+            "Keep mTLS, certificate-pinned, and otherwise incompatible TLS connections end-to-end when detected.",
+            "Force TLS interception and report failures without automatic fallback."
+          ],
+          "description": "Safe prioritizes application compatibility; strict prioritizes complete capture."
         },
         "autocurl.match": {
           "type": "string",
@@ -127,11 +169,35 @@
           "default": [],
           "description": "Headers injected into live requests. Use with care."
         },
+        "autocurl.bypassTargets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Hosts, IPs, domain suffixes, or CIDRs excluded from capture for mTLS and direct infrastructure calls."
+        },
         "autocurl.maxBodyBytes": {
           "type": "number",
           "default": 1048576,
           "minimum": 1,
           "description": "Maximum request-body bytes retained for cURL generation."
+        },
+        "autocurl.startupDiagnosticSeconds": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "description": "Seconds to wait before checking optional listen ports and reporting that no proxy traffic was observed."
+        },
+        "autocurl.expectedListenPorts": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "default": [],
+          "description": "Optional localhost ports the service should open, used only for startup diagnostics."
         },
         "autocurl.showSecrets": {
           "type": "boolean",
@@ -151,7 +217,7 @@
     "viewsWelcome": [
       {
         "view": "autocurl.requests",
-        "contents": "Capture outbound requests from your next debug launch.\n[Start Capture](command:autocurl.start)\n[Open Settings](command:workbench.action.openSettings?%5B%22%40ext%3Alingbo-huang.autocurl%22%5D)"
+        "contents": "Capture outbound requests from your next debug launch.\n[Quick Start / 使用说明](command:autocurl.openQuickStart)\n[Start Capture](command:autocurl.start)\n[Run Environment Check](command:autocurl.runDiagnostics)\n[Open Settings](command:workbench.action.openSettings?%5B%22%40ext%3Alingbo-huang.autocurl%22%5D)"
       }
     ],
     "menus": {
@@ -162,14 +228,24 @@
           "group": "navigation@1"
         },
         {
-          "command": "autocurl.stop",
-          "when": "view == autocurl.requests",
+          "command": "autocurl.pause",
+          "when": "view == autocurl.requests && autocurl.running && autocurl.recording",
           "group": "navigation@2"
+        },
+        {
+          "command": "autocurl.resume",
+          "when": "view == autocurl.requests && autocurl.running && !autocurl.recording",
+          "group": "navigation@3"
+        },
+        {
+          "command": "autocurl.stop",
+          "when": "view == autocurl.requests && autocurl.running",
+          "group": "navigation@4"
         },
         {
           "command": "autocurl.clear",
           "when": "view == autocurl.requests",
-          "group": "navigation@3"
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [

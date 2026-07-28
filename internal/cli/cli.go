@@ -1,16 +1,20 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +24,7 @@ import (
 	"github.com/Lingbo-Huang/autocurl/internal/render"
 )
 
-const Version = "0.2.2"
+const Version = "0.3.0"
 
 type stringList []string
 
@@ -88,18 +92,41 @@ Run "autocurl <command> --help" for details.
 
 func doctor(jsonOutput bool, stdout io.Writer) int {
 	type executable struct {
-		Name      string `json:"name"`
-		Available bool   `json:"available"`
-		Path      string `json:"path,omitempty"`
+		Name          string `json:"name"`
+		Available     bool   `json:"available"`
+		Path          string `json:"path,omitempty"`
+		Version       string `json:"version,omitempty"`
+		Compatibility string `json:"compatibility"`
+		Note          string `json:"note,omitempty"`
 	}
 	names := []string{"go", "python3", "node", "java", "keytool"}
 	executables := make([]executable, 0, len(names))
 	for _, name := range names {
 		path, err := exec.LookPath(name)
+		version := ""
+		compatibility := "unavailable"
+		note := ""
+		if err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			version = executableVersion(ctx, name, path)
+			cancel()
+			compatibility = "supported"
+			if name == "node" && !nodeSupportsEnvironmentProxy(version) {
+				compatibility = "client-dependent"
+				note = "Built-in environment proxying requires Node 22.21+ or 24.5+; older Node clients need explicit proxy configuration."
+			}
+			if name == "keytool" {
+				compatibility = "support-tool"
+				note = "Used to create the temporary Java truststore."
+			}
+		}
 		executables = append(executables, executable{
-			Name:      name,
-			Available: err == nil,
-			Path:      path,
+			Name:          name,
+			Available:     err == nil,
+			Path:          path,
+			Version:       version,
+			Compatibility: compatibility,
+			Note:          note,
 		})
 	}
 	result := struct {
@@ -118,8 +145,9 @@ func doctor(jsonOutput bool, stdout io.Writer) int {
 		Notes: []string{
 			"Go and Python usually honor the injected proxy and CA environment variables.",
 			"Java support uses proxy system properties and a temporary PKCS12 truststore when keytool is available.",
-			"HTTP/1.1, HTTP/2, TLS/h2c gRPC, and classic ws/wss proxying are enabled.",
-			"Node.js environment-proxy support depends on the Node version and HTTP client.",
+			"Node.js built-in environment proxying requires Node 22.21+ or 24.5+; custom agents and older clients may ignore it.",
+			"Safe mode keeps detected mTLS, pinned/untrusted TLS, and incompatible TLS connections end-to-end.",
+			"HTTP/1.1, HTTP/2, TLS/h2c gRPC, and classic ws/wss handshake proxying are enabled.",
 		},
 	}
 
@@ -134,8 +162,15 @@ func doctor(jsonOutput bool, stdout io.Writer) int {
 		status := "missing"
 		if executable.Available {
 			status = executable.Path
+			if executable.Version != "" {
+				status += " · " + executable.Version
+			}
+			status += " · " + executable.Compatibility
 		}
 		fmt.Fprintf(stdout, "  %-8s %s\n", executable.Name, status)
+		if executable.Note != "" {
+			fmt.Fprintf(stdout, "           %s\n", executable.Note)
+		}
 	}
 	fmt.Fprintln(stdout)
 	for _, note := range result.Notes {
@@ -144,12 +179,49 @@ func doctor(jsonOutput bool, stdout io.Writer) int {
 	return 0
 }
 
+func executableVersion(ctx context.Context, name, path string) string {
+	arguments := []string{"--version"}
+	if name == "go" {
+		arguments = []string{"version"}
+	} else if name == "java" {
+		arguments = []string{"-version"}
+	} else if name == "keytool" {
+		return ""
+	}
+	output, err := exec.CommandContext(ctx, path, arguments...).CombinedOutput()
+	if err != nil && len(output) == 0 {
+		return ""
+	}
+	line, _, _ := strings.Cut(strings.TrimSpace(string(output)), "\n")
+	return strings.TrimSpace(line)
+}
+
+func nodeSupportsEnvironmentProxy(version string) bool {
+	version = strings.TrimSpace(version)
+	if strings.HasPrefix(version, "node ") {
+		version = strings.TrimSpace(strings.TrimPrefix(version, "node "))
+	}
+	version = strings.TrimPrefix(version, "v")
+	var major, minor int
+	if count, _ := fmt.Sscanf(version, "%d.%d", &major, &minor); count != 2 {
+		return false
+	}
+	if major == 22 {
+		return minor >= 21
+	}
+	if major == 24 {
+		return minor >= 5
+	}
+	return major >= 25
+}
+
 func runCommand(arguments []string, globalJSON bool, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("autocurl run", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
 	var replayHeaderValues stringList
 	var liveHeaderValues stringList
+	var bypassValues stringList
 	all := flags.Bool("all", false, "emit every captured request, not only failures and slow requests")
 	statusMin := flags.Int("status-min", 400, "minimum HTTP status considered a failure")
 	slow := flags.Duration("slow", 2*time.Second, "emit successful requests slower than this duration; 0 disables")
@@ -159,10 +231,12 @@ func runCommand(arguments []string, globalJSON bool, stdout, stderr io.Writer) i
 	verbose := flags.Bool("verbose", false, "print proxy setup details")
 	match := flags.String("match", "", "emit only requests whose URL contains this text")
 	method := flags.String("method", "", "emit only requests with this HTTP method")
+	mode := flags.String("mode", string(capture.ModeSafe), `capture mode: "safe" bypasses incompatible TLS; "strict" forces interception`)
 	copyCurl := flags.Bool("copy", false, "copy each emitted cURL to the clipboard; the latest match remains")
 	outputPath := flags.String("output", "", "write the latest emitted cURL to this file")
 	flags.Var(&replayHeaderValues, "replay-header", "header added only to generated cURL; repeatable")
 	flags.Var(&liveHeaderValues, "live-header", "header injected into live traffic and generated cURL; repeatable")
+	flags.Var(&bypassValues, "bypass", "host, IP, domain suffix, or CIDR excluded from capture; repeatable")
 	flags.Usage = func() {
 		fmt.Fprint(flags.Output(), `Usage:
   autocurl run [options] -- <command> [args...]
@@ -200,6 +274,15 @@ Examples:
 		fmt.Fprintln(stderr, "autocurl run: --max-body must be greater than zero")
 		return 2
 	}
+	if err := validateBypassTargets(bypassValues); err != nil {
+		fmt.Fprintf(stderr, "autocurl run: invalid --bypass: %v\n", err)
+		return 2
+	}
+	captureMode, err := parseCaptureMode(*mode)
+	if err != nil {
+		fmt.Fprintf(stderr, "autocurl run: %v\n", err)
+		return 2
+	}
 
 	replayHeaders, err := parseHeaders(replayHeaderValues)
 	if err != nil {
@@ -232,9 +315,11 @@ Examples:
 	})
 
 	session, err := startCaptureSession(capture.Options{
-		LiveHeaders: liveHeaders,
-		MaxBody:     *maxBody,
-		OnEvent:     emitter.Emit,
+		LiveHeaders:  liveHeaders,
+		MaxBody:      *maxBody,
+		Mode:         captureMode,
+		OnEvent:      emitter.Emit,
+		OnDiagnostic: emitter.EmitDiagnostic,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "autocurl run: %v\n", err)
@@ -242,7 +327,7 @@ Examples:
 	}
 	defer session.Close()
 
-	childEnvironment, environmentNotes, environmentErr := session.Environment(os.Environ())
+	childEnvironment, environmentNotes, environmentErr := session.Environment(os.Environ(), bypassValues)
 	if *verbose {
 		fmt.Fprintf(stderr, "[autocurl] proxy %s\n", session.ProxyURL())
 		fmt.Fprintf(stderr, "[autocurl] ephemeral CA %s\n", session.CAPath)
@@ -468,6 +553,73 @@ func (e *emitter) Emit(event capture.Event) {
 	}
 }
 
+func (e *emitter) EmitState(recording bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.options.JSON {
+		_ = e.encoder.Encode(struct {
+			SchemaVersion string `json:"schema_version"`
+			Type          string `json:"type"`
+			Recording     bool   `json:"recording"`
+		}{
+			SchemaVersion: "1",
+			Type:          "state",
+			Recording:     recording,
+		})
+		return
+	}
+	state := "paused"
+	if recording {
+		state = "recording"
+	}
+	fmt.Fprintf(e.options.Writer, "[autocurl] capture is now %s\n", state)
+}
+
+func (e *emitter) EmitDiagnostic(diagnostic capture.Diagnostic) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.options.JSON {
+		_ = e.encoder.Encode(struct {
+			SchemaVersion   string `json:"schema_version"`
+			Type            string `json:"type"`
+			Timestamp       string `json:"timestamp"`
+			Code            string `json:"code"`
+			Severity        string `json:"severity"`
+			Host            string `json:"host,omitempty"`
+			Summary         string `json:"summary"`
+			Detail          string `json:"detail,omitempty"`
+			SuggestedAction string `json:"suggested_action,omitempty"`
+			BypassTarget    string `json:"bypass_target,omitempty"`
+			AutoApplied     bool   `json:"auto_applied,omitempty"`
+			RetryRequired   bool   `json:"retry_required,omitempty"`
+		}{
+			SchemaVersion:   "1",
+			Type:            "diagnostic",
+			Timestamp:       diagnostic.Timestamp.UTC().Format(time.RFC3339Nano),
+			Code:            diagnostic.Code,
+			Severity:        diagnostic.Severity,
+			Host:            diagnostic.Host,
+			Summary:         diagnostic.Summary,
+			Detail:          diagnostic.Detail,
+			SuggestedAction: diagnostic.SuggestedAction,
+			BypassTarget:    diagnostic.BypassTarget,
+			AutoApplied:     diagnostic.AutoApplied,
+			RetryRequired:   diagnostic.RetryRequired,
+		})
+		return
+	}
+	fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl] %s: %s\n",
+		fallback(diagnostic.Severity, "info"), diagnostic.Summary)
+	if diagnostic.Detail != "" {
+		fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl] %s\n", diagnostic.Detail)
+	}
+	if diagnostic.SuggestedAction != "" {
+		fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl] action: %s\n", diagnostic.SuggestedAction)
+	}
+}
+
 func (e *emitter) shouldEmit(event capture.Event) bool {
 	if e.options.Match != "" && !strings.Contains(event.URL, e.options.Match) {
 		return false
@@ -493,7 +645,11 @@ func sanitizeEventError(eventError error, rawURL, safeURL string) error {
 	return errors.New(message)
 }
 
-func buildChildEnvironment(base []string, address, caPath, tempDirectory string) ([]string, string) {
+func buildChildEnvironment(
+	base []string,
+	address, caPath, tempDirectory string,
+	bypassTargets []string,
+) ([]string, string) {
 	proxyURL := "http://" + address
 	host, port, _ := strings.Cut(address, ":")
 	overrides := map[string]string{
@@ -505,25 +661,31 @@ func buildChildEnvironment(base []string, address, caPath, tempDirectory string)
 		"HTTP_PROXY":                       proxyURL,
 		"NODE_EXTRA_CA_CERTS":              caPath,
 		"NODE_USE_ENV_PROXY":               "1",
-		"NO_PROXY":                         "",
 		"PIP_CERT":                         caPath,
 		"REQUESTS_CA_BUNDLE":               caPath,
 		"SSL_CERT_FILE":                    caPath,
 		"all_proxy":                        proxyURL,
 		"https_proxy":                      proxyURL,
 		"http_proxy":                       proxyURL,
-		"no_proxy":                         "",
-		"no_grpc_proxy":                    "",
+	}
+	bypass := mergeBypassTargets(base, bypassTargets)
+	if bypass != "" {
+		overrides["NO_PROXY"] = bypass
+		overrides["no_proxy"] = bypass
+		overrides["no_grpc_proxy"] = bypass
 	}
 
 	note := ""
 	if truststorePath, err := createJavaTruststore(caPath, tempDirectory); err == nil {
-		javaOptions := strings.TrimSpace(environmentValue(base, "JAVA_TOOL_OPTIONS") + " " +
+		javaOptions := environmentValue(base, "JAVA_TOOL_OPTIONS") + " " +
 			"-Dhttp.proxyHost=" + host + " " +
 			"-Dhttp.proxyPort=" + port + " " +
 			"-Dhttps.proxyHost=" + host + " " +
-			"-Dhttps.proxyPort=" + port + " " +
-			"-Dhttp.nonProxyHosts= " +
+			"-Dhttps.proxyPort=" + port + " "
+		if bypass != "" {
+			javaOptions += "-Dhttp.nonProxyHosts=" + javaNonProxyHosts(bypass) + " "
+		}
+		javaOptions = strings.TrimSpace(javaOptions +
 			"-Djavax.net.ssl.trustStore=" + truststorePath + " " +
 			"-Djavax.net.ssl.trustStoreType=PKCS12 " +
 			"-Djavax.net.ssl.trustStorePassword=changeit")
@@ -535,11 +697,171 @@ func buildChildEnvironment(base []string, address, caPath, tempDirectory string)
 	return mergeEnvironment(base, overrides), note
 }
 
+func mergeBypassTargets(base, configured []string) string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0)
+	add := func(value string) {
+		for _, target := range strings.Split(value, ",") {
+			target = strings.TrimSpace(target)
+			if target == "" {
+				continue
+			}
+			if _, exists := seen[target]; exists {
+				continue
+			}
+			seen[target] = struct{}{}
+			result = append(result, target)
+		}
+	}
+	for _, name := range []string{"NO_PROXY", "no_proxy", "no_grpc_proxy"} {
+		add(environmentValue(base, name))
+	}
+	for _, value := range configured {
+		add(value)
+	}
+	return strings.Join(result, ",")
+}
+
+func javaNonProxyHosts(bypass string) string {
+	targets := strings.Split(bypass, ",")
+	result := make([]string, 0, len(targets))
+	for _, target := range targets {
+		target = strings.TrimSpace(target)
+		if prefix, err := netip.ParsePrefix(target); err == nil {
+			patterns := javaCIDRPatterns(prefix)
+			if len(patterns) > 0 {
+				result = append(result, patterns...)
+			}
+			continue
+		}
+		if strings.HasPrefix(target, ".") {
+			target = "*" + target
+		}
+		result = append(result, target)
+	}
+	return strings.Join(result, "|")
+}
+
+func javaCIDRPatterns(prefix netip.Prefix) []string {
+	prefix = prefix.Masked()
+	if !prefix.Addr().Is4() {
+		if prefix.Bits() == prefix.Addr().BitLen() {
+			return []string{prefix.Addr().String()}
+		}
+		return nil
+	}
+	address := prefix.Addr().As4()
+	fullOctets := prefix.Bits() / 8
+	partialBits := prefix.Bits() % 8
+	fixed := make([]string, 0, 4)
+	for position := 0; position < fullOctets; position++ {
+		fixed = append(fixed, strconv.Itoa(int(address[position])))
+	}
+	if partialBits == 0 {
+		if fullOctets < len(address) {
+			fixed = append(fixed, "*")
+		}
+		return []string{strings.Join(fixed, ".")}
+	}
+	count := 1 << (8 - partialBits)
+	result := make([]string, 0, count)
+	for value := int(address[fullOctets]); value < int(address[fullOctets])+count; value++ {
+		parts := append([]string(nil), fixed...)
+		parts = append(parts, strconv.Itoa(value))
+		if fullOctets+1 < len(address) {
+			parts = append(parts, "*")
+		}
+		result = append(result, strings.Join(parts, "."))
+	}
+	return result
+}
+
+func validateBypassTargets(values []string) error {
+	for _, value := range values {
+		for _, target := range strings.Split(value, ",") {
+			target = strings.TrimSpace(target)
+			if target == "" {
+				continue
+			}
+			if strings.Contains(target, "://") {
+				return fmt.Errorf("%q is a URL; use only its host or IP", target)
+			}
+			if strings.ContainsAny(target, " \t\r\n") {
+				return fmt.Errorf("%q contains whitespace", target)
+			}
+			if _, err := netip.ParsePrefix(target); err == nil {
+				continue
+			}
+			if _, err := netip.ParseAddr(strings.Trim(target, "[]")); err == nil {
+				continue
+			}
+			host := target
+			if splitHost, port, err := net.SplitHostPort(target); err == nil {
+				host = strings.Trim(splitHost, "[]")
+				number, parseErr := strconv.Atoi(port)
+				if parseErr != nil || number < 1 || number > 65535 {
+					return fmt.Errorf("%q has an invalid port", target)
+				}
+			}
+			host = strings.TrimPrefix(host, "*.")
+			host = strings.TrimPrefix(host, ".")
+			if host == "" || strings.Contains(host, "/") {
+				return fmt.Errorf("%q is not a host, IP, domain suffix, or CIDR", target)
+			}
+			for _, character := range host {
+				if character >= 'a' && character <= 'z' ||
+					character >= 'A' && character <= 'Z' ||
+					character >= '0' && character <= '9' ||
+					strings.ContainsRune("-._*", character) {
+					continue
+				}
+				return fmt.Errorf("%q contains unsupported host characters", target)
+			}
+		}
+	}
+	return nil
+}
+
+func bypassCompatibilityNotes(bypass string) []string {
+	var cidrs []string
+	var ipv6CIDRs []string
+	for _, target := range strings.Split(bypass, ",") {
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(target))
+		if err != nil {
+			continue
+		}
+		cidrs = append(cidrs, prefix.String())
+		if prefix.Addr().Is6() && prefix.Bits() < prefix.Addr().BitLen() {
+			ipv6CIDRs = append(ipv6CIDRs, prefix.String())
+		}
+	}
+	notes := make([]string, 0, 2)
+	if len(cidrs) > 0 {
+		notes = append(notes,
+			"CIDR bypass targets "+strings.Join(cidrs, ", ")+
+				" are supported by Go and expanded for Java IPv4; Node.js and some Python clients may require exact hosts or IPs.")
+	}
+	if len(ipv6CIDRs) > 0 {
+		notes = append(notes,
+			"Java http.nonProxyHosts cannot represent IPv6 CIDR targets "+
+				strings.Join(ipv6CIDRs, ", ")+"; configure exact IPv6 hosts for Java.")
+	}
+	return notes
+}
+
 func fallback(value, alternative string) string {
 	if value == "" {
 		return alternative
 	}
 	return value
+}
+
+func parseCaptureMode(value string) (capture.Mode, error) {
+	mode := capture.Mode(strings.ToLower(strings.TrimSpace(value)))
+	if mode != capture.ModeSafe && mode != capture.ModeStrict {
+		return "", fmt.Errorf(`--mode must be "safe" or "strict"`)
+	}
+	return mode, nil
 }
 
 func createJavaTruststore(caPath, tempDirectory string) (string, error) {

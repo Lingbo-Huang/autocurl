@@ -56,17 +56,23 @@ func (session *captureSession) ProxyURL() string {
 	return "http://" + session.Address
 }
 
-func (session *captureSession) Environment(base []string) ([]string, []string, error) {
+func (session *captureSession) Environment(
+	base []string,
+	bypassTargets []string,
+) ([]string, []string, error) {
 	environment, javaNote := buildChildEnvironment(
 		base,
 		session.Address,
 		session.CAPath,
 		session.TempDirectory,
+		bypassTargets,
 	)
 	notes := make([]string, 0, 2)
 	if javaNote != "" {
 		notes = append(notes, javaNote)
 	}
+	bypass := mergeBypassTargets(base, bypassTargets)
+	notes = append(notes, bypassCompatibilityNotes(bypass)...)
 	environment, goNote, goErr := addGoTrustOverlay(
 		environment,
 		session.TempDirectory,

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -23,6 +24,11 @@ type proxyReadyEvent struct {
 	Environment       map[string]string `json:"environment"`
 	AppendEnvironment []string          `json:"append_environment,omitempty"`
 	Notes             []string          `json:"notes,omitempty"`
+	Mode              string            `json:"mode"`
+}
+
+type proxyControl struct {
+	Command string `json:"command"`
 }
 
 func proxyCommand(
@@ -36,6 +42,7 @@ func proxyCommand(
 
 	var replayHeaderValues stringList
 	var liveHeaderValues stringList
+	var bypassValues stringList
 	all := flags.Bool("all", true, "emit every captured request")
 	statusMin := flags.Int("status-min", 400, "minimum HTTP status considered a failure")
 	slow := flags.Duration("slow", 2*time.Second, "emit successful requests slower than this duration; 0 disables")
@@ -44,9 +51,11 @@ func proxyCommand(
 	jsonOutput := flags.Bool("json", globalJSON, "emit stable JSON Lines on stdout")
 	match := flags.String("match", "", "emit only requests whose URL contains this text")
 	method := flags.String("method", "", "emit only requests with this HTTP method")
+	mode := flags.String("mode", string(capture.ModeSafe), `capture mode: "safe" bypasses incompatible TLS; "strict" forces interception`)
 	lifetimeStdin := flags.Bool("lifetime-stdin", false, "stop when stdin closes; intended for IDE integrations")
 	flags.Var(&replayHeaderValues, "replay-header", "header added only to generated cURL; repeatable")
 	flags.Var(&liveHeaderValues, "live-header", "header injected into live traffic and generated cURL; repeatable")
+	flags.Var(&bypassValues, "bypass", "host, IP, domain suffix, or CIDR excluded from capture; repeatable")
 	flags.Usage = func() {
 		fmt.Fprint(flags.Output(), `Usage:
   autocurl [--json] proxy [options]
@@ -84,6 +93,15 @@ Examples:
 		fmt.Fprintln(stderr, "autocurl proxy: --max-body must be greater than zero")
 		return 2
 	}
+	if err := validateBypassTargets(bypassValues); err != nil {
+		fmt.Fprintf(stderr, "autocurl proxy: invalid --bypass: %v\n", err)
+		return 2
+	}
+	captureMode, err := parseCaptureMode(*mode)
+	if err != nil {
+		fmt.Fprintf(stderr, "autocurl proxy: %v\n", err)
+		return 2
+	}
 	replayHeaders, err := parseHeaders(replayHeaderValues)
 	if err != nil {
 		fmt.Fprintf(stderr, "autocurl proxy: invalid --replay-header: %v\n", err)
@@ -109,9 +127,11 @@ Examples:
 		Method:           strings.ToUpper(strings.TrimSpace(*method)),
 	})
 	session, err := startCaptureSession(capture.Options{
-		LiveHeaders: liveHeaders,
-		MaxBody:     *maxBody,
-		OnEvent:     emitter.Emit,
+		LiveHeaders:  liveHeaders,
+		MaxBody:      *maxBody,
+		Mode:         captureMode,
+		OnEvent:      emitter.Emit,
+		OnDiagnostic: emitter.EmitDiagnostic,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "autocurl proxy: %v\n", err)
@@ -119,7 +139,7 @@ Examples:
 	}
 	defer session.Close()
 
-	environment, notes, environmentErr := session.Environment(nil)
+	environment, notes, environmentErr := session.Environment(nil, bypassValues)
 	if environmentErr != nil {
 		notes = append(notes, "Environment compatibility warning: "+environmentErr.Error())
 	}
@@ -132,6 +152,7 @@ Examples:
 		Environment:       environmentMap(environment),
 		AppendEnvironment: []string{"GOFLAGS", "JAVA_TOOL_OPTIONS"},
 		Notes:             notes,
+		Mode:              string(captureMode),
 	}
 	if *jsonOutput {
 		if err := json.NewEncoder(stdout).Encode(ready); err != nil {
@@ -153,7 +174,33 @@ Examples:
 
 	stdinClosed := make(chan struct{})
 	go func() {
-		_, _ = io.Copy(io.Discard, stdin)
+		scanner := bufio.NewScanner(stdin)
+		for scanner.Scan() {
+			value := strings.TrimSpace(scanner.Text())
+			if value == "" {
+				continue
+			}
+			control := proxyControl{Command: value}
+			if strings.HasPrefix(value, "{") {
+				if err := json.Unmarshal([]byte(value), &control); err != nil {
+					fmt.Fprintf(stderr, "autocurl proxy: ignored invalid control message: %v\n", err)
+					continue
+				}
+			}
+			switch strings.ToLower(strings.TrimSpace(control.Command)) {
+			case "pause":
+				session.Proxy.SetRecording(false)
+				emitter.EmitState(false)
+			case "resume":
+				session.Proxy.SetRecording(true)
+				emitter.EmitState(true)
+			default:
+				fmt.Fprintf(stderr, "autocurl proxy: ignored unknown control command %q\n", control.Command)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintf(stderr, "autocurl proxy: read control input: %v\n", err)
+		}
 		close(stdinClosed)
 	}()
 	select {

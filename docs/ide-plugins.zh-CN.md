@@ -6,7 +6,7 @@ Autocurl 采用“一套 Go 核心、两个薄插件”的结构：
 flowchart LR
     V["VS Code / Cursor 插件"] --> P["autocurl proxy JSONL 会话"]
     J["JetBrains 插件"] --> P
-    P --> E["仅注入当前调试进程的环境"]
+    P --> E["注入当前调试进程环境<br/>GoLand 同时注入临时编译 overlay"]
     E --> A["Go / Python / Java / Node 服务"]
     A --> C["请求事件 + 完整 cURL"]
     C --> V
@@ -14,24 +14,38 @@ flowchart LR
 ```
 
 HTTP/2、gRPC、WebSocket、TLS、脱敏和 cURL 生成都在同一个 Go 引擎中实现。
-IDE 插件只负责开始/停止、注入调试环境、展示请求和复制。
+IDE 插件只负责开始/停止、注入本次 Run/Debug、展示请求和复制。GoLand 是一个
+例外：Go 在 macOS/Windows 上会走平台证书验证，因此插件还会把引擎生成的临时
+overlay 传给本次 `go build`。它只修改临时运行配置，不会写回原配置。
+
+### 插件版本和本地引擎版本不是一回事
+
+- **JetBrains 插件**是安装在 IDE 中的界面和 Run/Debug 适配层，版本显示在
+  **Settings → Plugins → Autocurl**。
+- **Go 引擎**是插件启动的后台代理程序，默认下载到 JetBrains Cache 下的
+  `autocurl/bin`，插件页不会显示它的版本。
+- 插件会校验最低引擎版本并自动替换旧缓存，但只替换引擎不会改变插件页版本。
+  修复同时涉及两层时，必须安装新版插件并重启 IDE。
 
 ## VS Code / Cursor
 
-安装 `autocurl-0.2.2.vsix` 后，默认直接按 F5：
+安装 `autocurl-0.3.0.vsix` 后，默认直接按 F5：
 
 1. 插件自动启动后台捕获会话。
 2. 在调试程序启动前注入临时代理和证书环境。
 3. 请求出现在 **Explorer → Autocurl Requests**。
 4. 点击请求查看 cURL，点击右侧按钮复制。
-5. 停止捕获后，临时代理和 CA 自动删除。
+5. Debug 会话结束或执行 **Stop Session** 后，临时代理和 CA 自动删除。
 
 常用命令：
 
 - **Autocurl: Start Capture**
-- **Autocurl: Stop Capture**
+- **Autocurl: Pause Recording / Resume Recording**
+- **Autocurl: Stop Session**
+- **Autocurl: Clear Requests**
 - **Autocurl: Copy Last cURL**
-- **Autocurl: Render Selected Request JSON**
+- **Autocurl: Generate cURL from Request JSON**
+- **Autocurl: Run Environment Check**
 - **Autocurl: Download/Update Engine**
 
 常用配置：
@@ -42,10 +56,14 @@ IDE 插件只负责开始/停止、注入调试环境、展示请求和复制。
 | `autocurl.injectDebugEnvironment` | `true` | 注入当前调试进程 |
 | `autocurl.binaryPath` | 空 | 指定本地引擎路径 |
 | `autocurl.autoDownload` | `true` | 自动下载并校验 Release |
+| `autocurl.captureMode` | `safe` | Safe 兼容优先；Strict 强制尝试拦截 |
 | `autocurl.match` | 空 | 只显示 URL 包含该文本的请求 |
 | `autocurl.method` | 空 | 只显示指定方法 |
 | `autocurl.replayHeaders` | `[]` | 只给生成的 cURL 增加 Header |
 | `autocurl.liveHeaders` | `[]` | 给真实请求增加 Header，谨慎使用 |
+| `autocurl.bypassTargets` | `[]` | 绕过 mTLS 或必须直连的基础设施目标 |
+| `autocurl.expectedListenPorts` | `[]` | 诊断服务是否按预期监听，例如 `[8080,8088]` |
+| `autocurl.startupDiagnosticSeconds` | `15` | 启动后检查端口/代理流量前等待秒数 |
 | `autocurl.showSecrets` | `false` | 关闭脱敏，不建议 |
 
 打包：
@@ -56,7 +74,7 @@ npm ci
 npm run package
 ```
 
-产物：`ide/vscode/autocurl-0.2.2.vsix`。
+产物：`ide/vscode/autocurl-0.3.0.vsix`。
 
 发布 VS Code Marketplace 需要创建 publisher 和凭据。Cursor 使用相同的
 VS Code 扩展格式，其扩展市场以 Open VSX 为底层来源。首次入驻、GitHub
@@ -84,25 +102,46 @@ Node.js、Gradle 等配置使用的环境变量接口并不完全相同；插件
 `getEnvs/setEnvs` 接口和 GoLand 的 `getCustomEnvironment/setCustomEnvironment`
 接口。极少数自定义配置不提供环境变量时，插件会显示其真实类名，便于继续适配。
 
+### mTLS、etcd 和必须直连的基础设施
+
+显式 HTTP 代理通过 TLS 中间人才能读取 HTTPS/gRPC 请求。mTLS 还要求客户端
+持有私钥，Autocurl 不会也无法从业务进程导出这把私钥，因此 mTLS 目标必须
+保持端到端直连。
+
+在 **Settings → Tools → Autocurl → Bypass capture** 中逐行填写需要绕过的
+域名、IP、域名后缀或 CIDR，例如：
+
+```text
+192.0.2.10
+198.51.100.0/24
+.infra.example.com
+```
+
+插件会把它们应用到 `NO_PROXY`、`no_proxy`、`no_grpc_proxy` 和 Java
+`http.nonProxyHosts`。Run Configuration 中已有的绕过项也会保留。绕过目标
+不会出现在捕获列表，其余调用继续捕获。
+
 断点在发送之前时，选中请求 JSON，右键执行
-**Render Selected Request JSON as cURL**。没有选区时会读取整个当前文档。
-这个操作不发网络，只生成并复制 cURL。
+**Generate cURL from Request JSON**。插件依次读取编辑器选区、当前 JSON 文档、
+剪贴板；都没有内容时提供 Go、Java、Python、Axios 和 Fetch 模板。这个操作
+不发网络，只生成并复制 cURL。由于不同语言调试器没有通用变量读取 API，
+Variables / Watches 中的值需要先使用 **Copy Value** 复制到剪贴板。
 
 打包：
 
 ```bash
 cd ide/jetbrains
-./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
 ```
 
 产物：
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.2.zip`。
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.0.zip`。
 
 使用本机 IDE 快速验证：
 
 ```bash
 AUTOCURL_LOCAL_IDE="/Applications/GoLand.app" \
-  ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+  ./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
 ```
 
 发布 JetBrains Marketplace 使用 `./gradlew publishPlugin`，通过环境变量
@@ -121,9 +160,13 @@ lsof -nP -iTCP:8080 -sTCP:LISTEN
 curl --noproxy '*' -v http://127.0.0.1:8080/
 ```
 
-如果普通 Run 能监听、只有 **Run Selected with Autocurl** 不能监听，请查看
-该 Run 窗口最末尾的启动异常，并在 Issue 中附上 Run Configuration 的类型和
-错误信息。Autocurl 自己监听 `127.0.0.1` 的随机空闲端口，不会占用 8080。
+如果普通 Run 能监听、只有 **Run Selected with Autocurl** 不能监听，请在设置
+中填写 **Expected local listen ports**（例如 `8080,8088`），并查看 Autocurl
+诊断和 Run 控制台。如果程序停在 etcd、gRPC、配置中心或其他 mTLS 依赖初始化
+处，默认 Safe 模式会尽量直连并提示；也可以点击 **Always bypass this host and
+rerun**。仍不能监听时，在 Issue 中附上 Run Configuration 类型、环境检查和
+诊断 code。Autocurl 自己监听
+`127.0.0.1` 的随机空闲端口，不会占用 8080。
 它捕获的是服务收到入站请求后“向外发出的 HTTP 调用”，不会把 Apifox 发给
 服务的入站请求显示为捕获项。
 
@@ -135,9 +178,11 @@ curl --noproxy '*' -v http://127.0.0.1:8080/
 tls: failed to verify certificate: x509: “example.com” certificate is not trusted
 ```
 
-先确认使用的是 0.2.2 或更高版本的 IDE 插件和引擎。0.2.1 插件曾错误地继续
-复用 0.2.0 引擎，而 0.2.0 在 macOS 上没有 Go build-process CA overlay。
-0.2.2 开始，插件与引擎版本必须匹配，旧的托管引擎会被自动替换。
+先点击 **Environment Check**，确认 IDE 插件和引擎都是 0.3.0。0.2.1 插件曾错误地继续
+复用 0.2.0 引擎，而 0.2.2 在从 macOS 图形界面启动的 GoLand 中又可能找不到
+Go SDK。0.2.3 会从 `GOROOT`、标准安装目录和用户登录 Shell 查找 Go，并强制
+插件与引擎版本匹配，旧的托管引擎会被自动替换；JetBrains 插件还会把临时
+overlay 追加到 GoLand 的编译参数，避免它只进入运行环境、没有参与 `go build`。
 
 ## 引擎自动下载与安全
 
@@ -151,12 +196,20 @@ tls: failed to verify certificate: x509: “example.com” certificate is not tr
 下载时按 macOS/Linux/Windows 与 amd64/arm64 选择压缩包，并核对
 `SHA256SUMS`。IDE 包要求匹配的引擎版本，避免继续复用缺少运行时修复的旧缓存。
 
+正式 Release 用户由插件自动完成这一步。预发布验收时，如果 IDE 插件版本已经
+是 0.3.0、GitHub 最新 Release 仍是旧版本，自动下载会主动拒绝旧引擎。维护者应
+先执行 `make build`，临时将 JetBrains 的 **Engine path** 或 VS Code/Cursor 的
+`autocurl.binaryPath` 指向仓库根目录的 `autocurl`；发布 v0.3.0 后清空该路径，
+即可按正常用户路径验证自动下载。
+
 IDE 协议的 `ready.environment` 只包含新生成的覆盖值，不会把 IDE 父进程的
 环境变量或密钥输出到 JSON。`GOFLAGS` 和 `JAVA_TOOL_OPTIONS` 标记为追加，
 避免覆盖用户原有配置。
 
-插件停止时关闭引擎 stdin；引擎关闭代理并删除临时 CA、Java truststore 和
-Go overlay。不会修改系统代理或系统钥匙串。
+**Pause Recording** 只暂停记录，代理继续转发；**Stop Session** 先停止关联的
+Run/Debug 程序，再关闭代理并删除临时 CA、Java truststore 和 Go overlay；
+**Clear** 只清空请求列表。不会修改系统代理或系统钥匙串。完整状态说明见
+[IDE 会话生命周期](session-lifecycle.zh-CN.md)。
 
 ## 必须说清楚的边界
 
@@ -166,3 +219,7 @@ Go overlay。不会修改系统代理或系统钥匙串。
 - 如果只有 body，没有 URL 和 Header，插件无法凭空推断。
 - 证书固定、完全忽略代理的自定义客户端、HTTP/3、WebSocket 消息帧和
   protobuf 语义解析仍受主 README 中的限制。
+
+逐类诊断、Safe/Strict 模式、Node/自定义 Transport 和协议降级操作见
+[故障诊断指南](troubleshooting.zh-CN.md)。断点对象的多语言形状见
+[Generate cURL 指南](generate-curl-from-json.zh-CN.md)。

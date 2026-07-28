@@ -11,7 +11,9 @@ flowchart LR
     Q -->|"temporary debug environment"| A["Wrapped process<br/>Go / Python / Java / Node"]
     O --> A
     A -->|"HTTP_PROXY / HTTPS_PROXY<br/>runtime trust settings"| B["Local proxy<br/>127.0.0.1:ephemeral"]
-    B --> C{"Protocol detection"}
+    B --> S{"Safe or Strict TLS policy"}
+    S -->|"Safe: incompatible TLS"| T["End-to-end tunnel<br/>diagnostic, no capture"]
+    S -->|"Interceptable or Strict"| C{"Protocol detection"}
     C -->|"HTTP/1.0 or HTTP/1.1"| D["net/http handler"]
     C -->|"CONNECT + TLS ALPN h2"| E["HTTP/2 server"]
     C -->|"CONNECT + h2 preface"| F["h2c server"]
@@ -43,6 +45,12 @@ validation.
 
 No certificate is added to the system keychain. The temporary directory,
 including the Java PKCS12 truststore, is removed when the command exits.
+
+Safe mode probes each TLS destination once and caches compatibility for the
+session. mTLS, upstream trust incompatibility, and clients that reject the
+ephemeral CA are allowed to degrade to an opaque end-to-end tunnel. A tunneled
+request keeps the application working but cannot produce a cURL. Strict mode
+disables that compatibility fallback and reports the interception failure.
 
 ## Protocol selection
 
@@ -77,10 +85,24 @@ parent environment. Later lines are `request` events produced by the same
 emitter as `run`. IDE adapters keep stdin open for session ownership; closing
 it shuts down the proxy and deletes all ephemeral files.
 
+While stdin remains open, `{"command":"pause"}` suppresses recording without
+stopping forwarding; `{"command":"resume"}` restores recording. IDE Stop
+Session first terminates the associated Run/Debug process and only then closes
+stdin. Clear is an IDE-only list operation.
+
 ## Known design boundaries
 
 - Explicit proxy settings must be honored by the client library.
 - TLS certificate pinning cannot work with local interception.
+- mTLS cannot be transparently decrypted without the client's private key.
+- A process that is already running cannot receive proxy/trust variables
+  retroactively.
+- Request bodies beyond the configured bound are forwarded but only the prefix
+  is retained for rendering.
 - HTTP/3 uses QUIC/UDP and does not pass through this TCP proxy.
 - RFC 8441 WebSocket over HTTP/2 is different from HTTP/1.1 Upgrade and is not
   enabled in the current Go HTTP/2 stack.
+- Classic WebSocket frames are relayed after the handshake but are not rendered
+  as cURL messages.
+- gRPC protobuf payloads remain opaque without reflection or service `.proto`
+  files.

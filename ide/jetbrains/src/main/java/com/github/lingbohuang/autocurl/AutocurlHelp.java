@@ -14,13 +14,20 @@ final class AutocurlHelp {
             5. 点击 Copy cURL，或双击左侧请求，复制到剪贴板。
 
             断点调试：
-            请求尚未发出时，在编辑器中选中请求 JSON，点击 Render JSON；
-            它会直接生成并复制 cURL，不会发送网络请求。
+            请求尚未发出时，从 Variables / Watches 复制请求对象的 JSON，
+            再点击 Generate cURL from JSON。插件会优先读取编辑器选区，
+            然后读取当前 JSON 文件，最后读取剪贴板；它不会发送网络请求。
+
+            会话按钮：
+            Pause Recording 只暂停记录，网络继续正常转发。
+            Stop Session 先停止关联的业务程序，再关闭代理和临时 CA。
+            Clear 只清空列表，不影响程序和网络。
 
             注意：
             必须通过 Autocurl 的 Run Selected / Debug Selected 启动。
             普通 Run/Debug 按钮不会自动捕获。
             引擎与过滤设置：Settings → Tools → Autocurl。
+            遇到 mTLS、证书固定或自定义 Transport 时，使用 Safe 模式并按诊断绕过。
             """;
 
     private AutocurlHelp() {}

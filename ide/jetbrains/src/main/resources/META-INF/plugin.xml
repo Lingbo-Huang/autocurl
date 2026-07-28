@@ -18,6 +18,9 @@
         <notificationGroup
                 id="Autocurl onboarding"
                 displayType="BALLOON"/>
+        <notificationGroup
+                id="Autocurl diagnostics"
+                displayType="BALLOON"/>
         <postStartupActivity
                 implementation="com.github.lingbohuang.autocurl.AutocurlStartupActivity"/>
     </extensions>
@@ -40,8 +43,8 @@
         <action
                 id="Autocurl.RenderSelectedRequest"
                 class="com.github.lingbohuang.autocurl.RenderSelectedRequestAction"
-                text="Render Selected Request JSON as cURL"
-                description="Generate and copy a cURL from request JSON selected in the editor">
+                text="Generate cURL from Request JSON"
+                description="Generate and copy a cURL from selected, clipboard, or templated request JSON">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>

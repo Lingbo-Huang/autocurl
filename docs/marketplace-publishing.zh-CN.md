@@ -159,12 +159,12 @@ Open VSX 发布成功后，Cursor 可能需要一段时间完成同步和扫描�
 - `ide/vscode/src/binary.ts` 中的 `minimumVersion`
 - `ide/jetbrains/.../EngineManager.java` 中的 `MINIMUM_VERSION`
 
-以 `0.2.3` 为例：
+以 `0.3.0` 为例：
 
 ```bash
-bash scripts/check-release-version.sh v0.2.3
-git tag v0.2.3
-git push origin v0.2.3
+bash scripts/check-release-version.sh v0.3.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 Release 流程会：
@@ -181,3 +181,19 @@ Release 流程会：
 
 同一市场不接受相同版本重复上传。必须修复问题、递增版本号并重新发布；Open
 VSX 自动重试使用了 `--skip-duplicate`，所以已经存在的版本不会让整次重试失败。
+
+## 五、官方资料与容易误解的点
+
+- JetBrains 新插件上传：
+  https://plugins.jetbrains.com/docs/marketplace/uploading-a-new-plugin.html
+- JetBrains 更新与审核：
+  https://plugins.jetbrains.com/docs/marketplace/plugin-updates.html
+- VS Code 打包、Publisher、发布、Pricing 与 Sponsor：
+  https://code.visualstudio.com/api/working-with-extensions/publishing-extension
+- Open VSX：
+  https://github.com/eclipse-openvsx/openvsx
+
+Cursor 的编辑器扩展市场与它的 Agent Plugin Marketplace 是两套机制。Autocurl
+当前发布的是 VS Code 编辑器扩展，目标是 Open VSX。Cursor 还会做自己的同步、
+兼容性和安全检查，可能短时展示旧版；Release 中的 VSIX 始终保留为确定性的
+手动安装降级。

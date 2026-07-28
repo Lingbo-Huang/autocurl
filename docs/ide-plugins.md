@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.2.2.vsix` with
+Install `autocurl-0.3.0.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -38,9 +38,12 @@ Default workflow:
 Useful commands:
 
 - **Autocurl: Start Capture**
-- **Autocurl: Stop Capture**
+- **Autocurl: Pause Recording / Resume Recording**
+- **Autocurl: Stop Session**
+- **Autocurl: Clear Requests**
 - **Autocurl: Copy Last cURL**
-- **Autocurl: Render Selected Request JSON**
+- **Autocurl: Generate cURL from Request JSON**
+- **Autocurl: Run Environment Check**
 - **Autocurl: Download/Update Engine**
 
 Important settings:
@@ -51,10 +54,14 @@ Important settings:
 | `autocurl.injectDebugEnvironment` | `true` | Merge process-scoped proxy/trust variables |
 | `autocurl.binaryPath` | empty | Use a specific engine instead of managed/PATH lookup |
 | `autocurl.autoDownload` | `true` | Download and SHA-256 verify the matching release |
+| `autocurl.captureMode` | `safe` | Safe prioritizes compatibility; Strict forces interception |
 | `autocurl.match` | empty | Show only URLs containing this value |
 | `autocurl.method` | empty | Show only one HTTP method |
 | `autocurl.replayHeaders` | `[]` | Add headers only to generated cURLs |
 | `autocurl.liveHeaders` | `[]` | Inject headers into real traffic; use carefully |
+| `autocurl.bypassTargets` | `[]` | Keep mTLS/direct infrastructure targets outside capture |
+| `autocurl.expectedListenPorts` | `[]` | Diagnose service startup by checking localhost ports |
+| `autocurl.startupDiagnosticSeconds` | `15` | Wait before port/proxy-traffic diagnostics |
 | `autocurl.showSecrets` | `false` | Disable safe redaction |
 
 The environment provider applies to IDE debug launches, including Run Without
@@ -69,7 +76,7 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.2.2.vsix`.
+Output: `ide/vscode/autocurl-0.3.0.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
@@ -85,7 +92,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.2.2.zip` with
+Install `autocurl-jetbrains-0.3.0.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -109,14 +116,35 @@ both the common `getEnvs/setEnvs` interface and GoLand's
 configuration that exposes no environment map receives a warning containing
 its concrete class name.
 
-Autocurl 0.2.2 also requires the matching engine version. This prevents an IDE
-from reusing the 0.2.0 engine, whose macOS environment did not include the Go
-build-process CA overlay and could produce `x509: certificate is not trusted`
-for proxied HTTPS requests.
+### mTLS and direct infrastructure dependencies
 
-When a breakpoint is before send, select request JSON in an editor and use
-**Render Selected Request JSON as cURL**. The entire JSON document is used when
-there is no selection.
+An explicit HTTPS/gRPC proxy must terminate TLS to inspect requests. It cannot
+reuse a client's private key, so mTLS endpoints must remain end-to-end.
+Configure hosts, IPs, domain suffixes, or CIDRs under **Settings → Tools →
+Autocurl → Bypass capture**. The plugin applies them to `NO_PROXY`, `no_proxy`,
+`no_grpc_proxy`, and Java `http.nonProxyHosts`, while preserving values already
+present in the Run Configuration. Bypassed traffic is not captured.
+
+The JetBrains plugin and the local engine are separate versioned components.
+The plugin version shown under **Settings → Plugins → Autocurl** belongs to the
+IDE adapter. The engine is a background proxy cached under the JetBrains cache
+directory. Updating only the engine does not change the version shown on the
+plugin page. When a fix touches both layers, install the new plugin and restart
+the IDE; the plugin then verifies and updates its managed engine.
+
+Use Autocurl 0.2.3 or newer for Go HTTPS capture on macOS. Version 0.2.1 could
+reuse the 0.2.0 engine, while version 0.2.2 could miss the Go SDK when GoLand
+was launched from the macOS GUI with a minimal `PATH`. Version 0.2.3 discovers
+Go through `GOROOT`, standard installation locations, and the user's login
+shell, requires the matching engine version, and passes the temporary overlay
+to GoLand's build parameters so it participates in `go build`.
+
+When a breakpoint is before send, copy the request JSON from Variables/Watches
+and use **Generate cURL from Request JSON**. The plugin reads an editor
+selection, then a JSON document, then the clipboard. When all are empty it
+offers Go, Java, Python, Axios, and Fetch templates. Debugger values require
+Copy Value because there is no generic IntelliJ debugger-variable API shared by
+all language plugins.
 
 ### Package the JetBrains ZIP
 
@@ -124,11 +152,11 @@ Requires JDK 21 or lets the configured Foojay resolver provision it:
 
 ```bash
 cd ide/jetbrains
-./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+./gradlew test buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.2.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.0.zip`.
 
 For a faster local API check against an installed product:
 
@@ -163,8 +191,10 @@ environment variables and their secrets are never serialized into the JSON
 protocol. `GOFLAGS` and `JAVA_TOOL_OPTIONS` are marked as append-only so an IDE
 preserves values already present in the Run/Debug Configuration.
 
-Stopping capture closes engine stdin. The engine then shuts down its proxy and
-deletes the ephemeral CA, Java truststore, and Go overlay.
+Pause Recording suppresses new rows while the proxy keeps forwarding. Stop
+Session terminates associated Run/Debug processes before it closes engine
+stdin and removes the ephemeral CA, Java truststore, and Go overlay. Clear only
+empties the list.
 
 ## Current integration boundary
 
