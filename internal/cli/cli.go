@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -20,7 +21,7 @@ import (
 	"github.com/Lingbo-Huang/autocurl/internal/render"
 )
 
-const Version = "0.2.3"
+const Version = "0.2.4"
 
 type stringList []string
 
@@ -150,6 +151,7 @@ func runCommand(arguments []string, globalJSON bool, stdout, stderr io.Writer) i
 
 	var replayHeaderValues stringList
 	var liveHeaderValues stringList
+	var bypassValues stringList
 	all := flags.Bool("all", false, "emit every captured request, not only failures and slow requests")
 	statusMin := flags.Int("status-min", 400, "minimum HTTP status considered a failure")
 	slow := flags.Duration("slow", 2*time.Second, "emit successful requests slower than this duration; 0 disables")
@@ -163,6 +165,7 @@ func runCommand(arguments []string, globalJSON bool, stdout, stderr io.Writer) i
 	outputPath := flags.String("output", "", "write the latest emitted cURL to this file")
 	flags.Var(&replayHeaderValues, "replay-header", "header added only to generated cURL; repeatable")
 	flags.Var(&liveHeaderValues, "live-header", "header injected into live traffic and generated cURL; repeatable")
+	flags.Var(&bypassValues, "bypass", "host, IP, domain suffix, or CIDR excluded from capture; repeatable")
 	flags.Usage = func() {
 		fmt.Fprint(flags.Output(), `Usage:
   autocurl run [options] -- <command> [args...]
@@ -242,7 +245,7 @@ Examples:
 	}
 	defer session.Close()
 
-	childEnvironment, environmentNotes, environmentErr := session.Environment(os.Environ())
+	childEnvironment, environmentNotes, environmentErr := session.Environment(os.Environ(), bypassValues)
 	if *verbose {
 		fmt.Fprintf(stderr, "[autocurl] proxy %s\n", session.ProxyURL())
 		fmt.Fprintf(stderr, "[autocurl] ephemeral CA %s\n", session.CAPath)
@@ -493,7 +496,11 @@ func sanitizeEventError(eventError error, rawURL, safeURL string) error {
 	return errors.New(message)
 }
 
-func buildChildEnvironment(base []string, address, caPath, tempDirectory string) ([]string, string) {
+func buildChildEnvironment(
+	base []string,
+	address, caPath, tempDirectory string,
+	bypassTargets []string,
+) ([]string, string) {
 	proxyURL := "http://" + address
 	host, port, _ := strings.Cut(address, ":")
 	overrides := map[string]string{
@@ -505,25 +512,31 @@ func buildChildEnvironment(base []string, address, caPath, tempDirectory string)
 		"HTTP_PROXY":                       proxyURL,
 		"NODE_EXTRA_CA_CERTS":              caPath,
 		"NODE_USE_ENV_PROXY":               "1",
-		"NO_PROXY":                         "",
 		"PIP_CERT":                         caPath,
 		"REQUESTS_CA_BUNDLE":               caPath,
 		"SSL_CERT_FILE":                    caPath,
 		"all_proxy":                        proxyURL,
 		"https_proxy":                      proxyURL,
 		"http_proxy":                       proxyURL,
-		"no_proxy":                         "",
-		"no_grpc_proxy":                    "",
+	}
+	bypass := mergeBypassTargets(base, bypassTargets)
+	if bypass != "" {
+		overrides["NO_PROXY"] = bypass
+		overrides["no_proxy"] = bypass
+		overrides["no_grpc_proxy"] = bypass
 	}
 
 	note := ""
 	if truststorePath, err := createJavaTruststore(caPath, tempDirectory); err == nil {
-		javaOptions := strings.TrimSpace(environmentValue(base, "JAVA_TOOL_OPTIONS") + " " +
+		javaOptions := environmentValue(base, "JAVA_TOOL_OPTIONS") + " " +
 			"-Dhttp.proxyHost=" + host + " " +
 			"-Dhttp.proxyPort=" + port + " " +
 			"-Dhttps.proxyHost=" + host + " " +
-			"-Dhttps.proxyPort=" + port + " " +
-			"-Dhttp.nonProxyHosts= " +
+			"-Dhttps.proxyPort=" + port + " "
+		if bypass != "" {
+			javaOptions += "-Dhttp.nonProxyHosts=" + javaNonProxyHosts(bypass) + " "
+		}
+		javaOptions = strings.TrimSpace(javaOptions +
 			"-Djavax.net.ssl.trustStore=" + truststorePath + " " +
 			"-Djavax.net.ssl.trustStoreType=PKCS12 " +
 			"-Djavax.net.ssl.trustStorePassword=changeit")
@@ -533,6 +546,55 @@ func buildChildEnvironment(base []string, address, caPath, tempDirectory string)
 		note = "Java truststore unavailable: " + err.Error()
 	}
 	return mergeEnvironment(base, overrides), note
+}
+
+func mergeBypassTargets(base, configured []string) string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0)
+	add := func(value string) {
+		for _, target := range strings.Split(value, ",") {
+			target = strings.TrimSpace(target)
+			if target == "" {
+				continue
+			}
+			if _, exists := seen[target]; exists {
+				continue
+			}
+			seen[target] = struct{}{}
+			result = append(result, target)
+		}
+	}
+	for _, name := range []string{"NO_PROXY", "no_proxy", "no_grpc_proxy"} {
+		add(environmentValue(base, name))
+	}
+	for _, value := range configured {
+		add(value)
+	}
+	return strings.Join(result, ",")
+}
+
+func javaNonProxyHosts(bypass string) string {
+	targets := strings.Split(bypass, ",")
+	for index, target := range targets {
+		target = strings.TrimSpace(target)
+		if prefix, err := netip.ParsePrefix(target); err == nil &&
+			prefix.Addr().Is4() && prefix.Bits()%8 == 0 {
+			address := prefix.Masked().Addr().As4()
+			octets := prefix.Bits() / 8
+			parts := make([]string, 0, octets+1)
+			for position := 0; position < octets; position++ {
+				parts = append(parts, fmt.Sprintf("%d", address[position]))
+			}
+			if octets < len(address) {
+				parts = append(parts, "*")
+			}
+			target = strings.Join(parts, ".")
+		} else if strings.HasPrefix(target, ".") {
+			target = "*" + target
+		}
+		targets[index] = target
+	}
+	return strings.Join(targets, "|")
 }
 
 func fallback(value, alternative string) string {

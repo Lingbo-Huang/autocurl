@@ -109,6 +109,9 @@ export class CaptureSession implements vscode.Disposable {
     for (const header of configuration.get<string[]>("liveHeaders", [])) {
       args.push("--live-header", header);
     }
+    for (const target of configuration.get<string[]>("bypassTargets", [])) {
+      args.push("--bypass", target);
+    }
 
     this.clear();
     this.status.text = "$(sync~spin) Autocurl starting";

@@ -67,7 +67,7 @@ abstract class RunWithAutocurlAction extends AnAction {
                 session.stop();
                 Messages.showErrorDialog(
                         project,
-                        "Autocurl could not update environment variables for "
+                        "Autocurl could not update the temporary Run/Debug settings for "
                                 + configuration.getClass().getName() + ".",
                         "Autocurl Could Not Start"
                 );

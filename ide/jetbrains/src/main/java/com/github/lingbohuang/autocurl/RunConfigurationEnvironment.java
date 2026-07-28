@@ -1,11 +1,21 @@
 package com.github.lingbohuang.autocurl;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.intellij.execution.CommonProgramRunConfigurationParameters;
 import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.openapi.diagnostic.Logger;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -13,6 +23,7 @@ import java.util.regex.Pattern;
 
 final class RunConfigurationEnvironment {
     private static final Logger LOG = Logger.getInstance(RunConfigurationEnvironment.class);
+    private static final Gson GSON = new Gson();
     private static final Pattern GO_OVERLAY_FLAG = Pattern.compile(
             "(?:^|\\s)(-overlay=(?:\"(?:\\\\.|[^\"])*\"|'[^']*'|\\S+))"
     );
@@ -56,7 +67,75 @@ final class RunConfigurationEnvironment {
             }
         }
         return environmentInjected
+                && alignGoOverlayWithSdk(configuration, environment.get("GOFLAGS"))
                 && injectGoBuildOverlay(configuration, environment.get("GOFLAGS"));
+    }
+
+    private static boolean alignGoOverlayWithSdk(Object configuration, String goFlags) {
+        String sdkHome = resolveGoSdkHome(configuration);
+        if (sdkHome == null) return true;
+        return alignGoOverlayWithSdk(goFlags, sdkHome, System.getProperty("os.name"));
+    }
+
+    static boolean alignGoOverlayWithSdk(String goFlags, String sdkHome, String osName) {
+        String overlayFlag = extractGoOverlayFlag(goFlags);
+        if (overlayFlag == null || sdkHome == null || sdkHome.isBlank()) return true;
+
+        String platform = goPlatform(osName);
+        if (platform == null) return true;
+        Path overlayPath = Path.of(unquote(overlayFlag.substring("-overlay=".length())));
+        Path sdkTarget = Path.of(
+                sdkHome,
+                "src",
+                "crypto",
+                "x509",
+                "root_" + platform + ".go"
+        );
+        if (!Files.isRegularFile(sdkTarget)) {
+            LOG.warn("Autocurl could not find the Go SDK x509 source at " + sdkTarget);
+            return false;
+        }
+
+        Path staging = null;
+        try {
+            JsonObject root = JsonParser.parseString(
+                    Files.readString(overlayPath, StandardCharsets.UTF_8)
+            ).getAsJsonObject();
+            JsonObject replacements = root.getAsJsonObject("Replace");
+            if (replacements == null) {
+                LOG.warn("Autocurl Go overlay has no Replace map: " + overlayPath);
+                return false;
+            }
+            String target = sdkTarget.toString();
+            if (replacements.has(target)) return true;
+
+            String replacement = findPlatformRootReplacement(
+                    replacements,
+                    "root_" + platform + ".go"
+            );
+            if (replacement == null) {
+                LOG.warn("Autocurl Go overlay has no platform root replacement: " + overlayPath);
+                return false;
+            }
+            replacements.addProperty(target, replacement);
+
+            Path parent = overlayPath.toAbsolutePath().getParent();
+            staging = Files.createTempFile(parent, "autocurl-go-overlay-", ".json");
+            Files.writeString(staging, GSON.toJson(root), StandardCharsets.UTF_8);
+            moveReplacing(staging, overlayPath);
+            staging = null;
+            return true;
+        } catch (IOException | RuntimeException error) {
+            LOG.warn("Could not align the Autocurl Go overlay with SDK " + sdkHome, error);
+            return false;
+        } finally {
+            if (staging != null) {
+                try {
+                    Files.deleteIfExists(staging);
+                } catch (IOException ignored) {
+                }
+            }
+        }
     }
 
     static boolean injectGoBuildOverlay(Object configuration, String goFlags) {
@@ -88,6 +167,86 @@ final class RunConfigurationEnvironment {
         if (flags == null || flags.isBlank()) return null;
         Matcher matcher = GO_OVERLAY_FLAG.matcher(flags);
         return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private static String resolveGoSdkHome(Object configuration) {
+        try {
+            Method getConfigurationModule = configuration.getClass()
+                    .getMethod("getConfigurationModule");
+            Object configurationModule = getConfigurationModule.invoke(configuration);
+            if (configurationModule == null) return null;
+            Object module = configurationModule.getClass().getMethod("getModule")
+                    .invoke(configurationModule);
+            if (module == null) return null;
+
+            Object project = configuration.getClass().getMethod("getProject")
+                    .invoke(configuration);
+            ClassLoader goClassLoader = configuration.getClass().getClassLoader();
+            Class<?> projectClass = goClassLoader.loadClass(
+                    "com.intellij.openapi.project.Project"
+            );
+            Class<?> moduleClass = goClassLoader.loadClass(
+                    "com.intellij.openapi.module.Module"
+            );
+            Class<?> serviceClass = goClassLoader.loadClass("com.goide.sdk.GoSdkService");
+            Object service = serviceClass.getMethod("getInstance", projectClass)
+                    .invoke(null, project);
+            Object sdk = serviceClass.getMethod("getSdk", moduleClass)
+                    .invoke(service, module);
+            if (sdk == null) return null;
+            Class<?> sdkClass = goClassLoader.loadClass("com.goide.sdk.GoSdk");
+            Object home = sdkClass.getMethod("getHomePath").invoke(sdk);
+            return home == null ? null : home.toString();
+        } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+            return null;
+        } catch (IllegalAccessException | InvocationTargetException error) {
+            LOG.warn("Could not read the Go SDK home from the Run Configuration", error);
+            return null;
+        }
+    }
+
+    private static String findPlatformRootReplacement(
+            JsonObject replacements,
+            String sourceFileName
+    ) {
+        for (Map.Entry<String, JsonElement> entry : replacements.entrySet()) {
+            if (Path.of(entry.getKey()).getFileName().toString().equals(sourceFileName)
+                    && entry.getValue().isJsonPrimitive()) {
+                return entry.getValue().getAsString();
+            }
+        }
+        return null;
+    }
+
+    private static String goPlatform(String osName) {
+        if (osName == null) return null;
+        String normalized = osName.toLowerCase();
+        if (normalized.contains("mac") || normalized.contains("darwin")) return "darwin";
+        if (normalized.contains("win")) return "windows";
+        return null;
+    }
+
+    private static String unquote(String value) {
+        if (value.length() < 2) return value;
+        char first = value.charAt(0);
+        char last = value.charAt(value.length() - 1);
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
+    }
+
+    private static void moveReplacing(Path source, Path target) throws IOException {
+        try {
+            Files.move(
+                    source,
+                    target,
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static boolean containsGoOverlayFlag(String currentParams, String overlayFlag) {

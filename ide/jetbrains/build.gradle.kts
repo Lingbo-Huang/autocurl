@@ -68,6 +68,10 @@ intellijPlatform {
               <b>Settings → Tools → Autocurl</b>。
             </p>
             <p>
+              <b>mTLS / etcd：</b>在 <b>Settings → Tools → Autocurl →
+              Bypass capture</b> 中配置必须直连的域名、IP 或 CIDR。
+            </p>
+            <p>
               插件只为本次运行注入进程级代理和临时证书，不修改系统代理，
               也不会永久修改原 Run/Debug Configuration。
             </p>
@@ -97,10 +101,19 @@ intellijPlatform {
             </p>
         """.trimIndent()
         changeNotes = """
+            <h3>0.2.4</h3>
+            <ul>
+              <li>Preserved existing NO_PROXY, no_proxy, and no_grpc_proxy values instead of clearing them.</li>
+              <li>Added configurable bypass targets for mTLS, etcd, certificate-pinned, and direct infrastructure calls.</li>
+              <li>Applied bypass targets consistently to Go, Python, Node.js, gRPC, and Java proxy settings.</li>
+              <li>Fixed service startup hangs caused by forcing mTLS dependencies through TLS interception.</li>
+            </ul>
+
             <h3>0.2.3</h3>
             <ul>
               <li>Fixed Go HTTPS capture when JetBrains is launched from the macOS GUI and its engine process cannot find the configured Go SDK on PATH.</li>
               <li>Fixed GoLand builds by passing the temporary Autocurl overlay to the Go compiler as well as the launched process.</li>
+              <li>Aligned the overlay with GoLand's configured GOROOT even when Homebrew exposes the same SDK through different symlink and Cellar paths.</li>
               <li>Added Go SDK discovery through GOROOT, standard installation paths, and the user's login shell.</li>
               <li>Added regression tests for macOS GUI Go discovery and JetBrains Go build parameter injection.</li>
             </ul>

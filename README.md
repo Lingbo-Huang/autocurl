@@ -12,13 +12,13 @@ changing application code.
 
 The same Go capture engine now powers two thin IDE plugins:
 
-- **VS Code and Cursor:** install `autocurl-0.2.3.vsix` from
+- **VS Code and Cursor:** install `autocurl-0.2.4.vsix` from
   [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases). Start
   debugging normally. Capture starts automatically, and requests appear under
   **Explorer → Autocurl Requests**. Click a request to inspect it or click its
   action to copy the complete cURL.
 - **IntelliJ IDEA, GoLand, PyCharm, WebStorm, and other JetBrains IDEs:**
-  install `autocurl-jetbrains-0.2.3.zip` with
+  install `autocurl-jetbrains-0.2.4.zip` with
   **Settings → Plugins → ⚙ → Install Plugin from Disk**. Select an existing
   Run/Debug Configuration, then choose
   **Run → Run Selected with Autocurl** or
@@ -43,6 +43,12 @@ restarting the IDE; the plugin then verifies and updates its managed engine.
 The plugins create only a process-scoped proxy session. They do not change the
 operating-system proxy, add a permanent CA, or modify the original JetBrains
 Run Configuration.
+
+If a service uses mTLS, certificate pinning, or infrastructure calls that must
+remain direct, add the corresponding host, IP, domain suffix, or CIDR under
+**Settings → Tools → Autocurl → Bypass capture**. The engine also preserves
+existing `NO_PROXY`, `no_proxy`, and `no_grpc_proxy` values. Bypassed traffic is
+not captured; all other eligible traffic still is.
 
 If execution is paused before the network call, select a JSON object containing
 `method`, `url`, `headers`, and `body`, then run
@@ -148,6 +154,7 @@ make build
 autocurl run --all --match '/orders' --copy -- python3 app.py
 autocurl run --all --match '/orders' --copy -- go run ./cmd/service
 autocurl run --all --match '/orders' --copy -- java -jar app.jar
+autocurl run --all --bypass 10.4.44.94 --bypass 10.61.98.0/24 -- go run ./cmd/service
 ```
 
 Dependency-free smoke examples:
@@ -300,6 +307,7 @@ Important `run` options:
 | `--slow` | `2s` | Emit successful requests slower than this; `0` disables |
 | `--replay-header` | none | Add a header only to generated cURLs |
 | `--live-header` | none | Add a header to live traffic and generated cURLs |
+| `--bypass` | existing `NO_PROXY` values | Exclude a host, IP, domain suffix, or CIDR; repeatable |
 | `--max-body` | `1048576` | Maximum request-body bytes retained |
 | `--show-secrets` | off | Print exact sensitive values; unsafe for sharing |
 | `--json` | off | Emit stable JSON Lines for automation |
@@ -344,6 +352,7 @@ when known.
 | WebSocket over HTTP/2 | Not yet | RFC 8441 Extended CONNECT is a separate path |
 | HTTP/3/QUIC | Not yet | QUIC does not use this TCP proxy path |
 | Certificate-pinned TLS | Unsupported | The client intentionally rejects generated certificates |
+| Mutual TLS (mTLS) | Bypass required | A transparent MITM cannot reuse the client's private key; configure `--bypass` / IDE bypass targets |
 
 ### gRPC replay boundary
 
@@ -431,7 +440,7 @@ optional `warning`, and copy/output status. Fields may be added compatibly;
 {
   "schema_version": "1",
   "type": "ready",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "proxy_url": "http://127.0.0.1:54321",
   "ca_file": "/tmp/autocurl-.../autocurl-ca.pem",
   "environment": {

@@ -9,7 +9,7 @@
 ### VS Code / Cursor
 
 1. 从 [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases)
-   下载 `autocurl-0.2.3.vsix`。
+   下载 `autocurl-0.2.4.vsix`。
 2. 在命令面板执行 **Extensions: Install from VSIX...**。
 3. 像平时一样点击 Debug 或按 F5。
 4. 打开 **Explorer → Autocurl Requests**。点击某个请求查看完整 cURL，
@@ -20,7 +20,7 @@
 
 ### IntelliJ IDEA / GoLand / PyCharm / WebStorm
 
-1. 从 Releases 下载 `autocurl-jetbrains-0.2.3.zip`。
+1. 从 Releases 下载 `autocurl-jetbrains-0.2.4.zip`。
 2. 打开 **Settings → Plugins → ⚙ → Install Plugin from Disk**。
 3. 选择已有的 Run/Debug Configuration。
 4. 使用 **Run → Run Selected with Autocurl** 或
@@ -29,6 +29,11 @@
 
 JetBrains 插件会复制一个临时运行配置并注入代理环境，不会永久修改原有
 Run Configuration。
+
+如果服务依赖 mTLS、证书固定或必须直连的基础设施，请在
+**Settings → Tools → Autocurl → Bypass capture** 中逐行填写域名、IP、域名后缀
+或 CIDR。已有的 `NO_PROXY`、`no_proxy`、`no_grpc_proxy` 不会再被插件清空。
+绕过的调用不捕获，其他出站 HTTP 调用继续正常捕获。
 
 GoLand 用户可以直接运行
 [`examples/go-http-client`](examples/go-http-client/README.md) 验证。示例会发出
@@ -122,6 +127,21 @@ autocurl run \
 ```
 
 如果需要真实请求也携带 Header，使用 `--live-header`。
+
+## mTLS 和基础设施地址绕过
+
+mTLS 依赖客户端私钥，透明代理无法代替业务进程完成双向认证。etcd、配置中心、
+内部网关或不应被代理的目标可以用可重复的 `--bypass` 保持直连：
+
+```bash
+autocurl run --all \
+  --bypass 10.4.44.94 \
+  --bypass 10.61.98.0/24 \
+  -- go run ./cmd/service
+```
+
+命令行会保留进程已有的 `NO_PROXY`、`no_proxy`、`no_grpc_proxy`。JetBrains
+用户在 **Settings → Tools → Autocurl → Bypass capture** 中逐行配置同样内容。
 
 ## IDE Debug 怎么使用
 

@@ -94,6 +94,7 @@ public final class CaptureSession implements Disposable {
             if (!settings.method.isBlank()) command.addAll(List.of("--method", settings.method));
             command.addAll(List.of("--max-body", String.valueOf(settings.maxBodyBytes)));
             if (settings.showSecrets) command.add("--show-secrets");
+            settings.bypassTargets.forEach(target -> command.addAll(List.of("--bypass", target)));
             settings.replayHeaders.forEach(header -> command.addAll(List.of("--replay-header", header)));
             settings.liveHeaders.forEach(header -> command.addAll(List.of("--live-header", header)));
 

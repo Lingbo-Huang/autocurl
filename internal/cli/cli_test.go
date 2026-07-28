@@ -133,6 +133,62 @@ func TestEnvironmentMapContainsOnlyProvidedOverrides(t *testing.T) {
 	}
 }
 
+func TestMergeBypassTargetsPreservesExistingValues(t *testing.T) {
+	got := mergeBypassTargets(
+		[]string{
+			"NO_PROXY=localhost,127.0.0.1",
+			"no_proxy=127.0.0.1,.internal.example",
+			"no_grpc_proxy=10.4.44.94",
+		},
+		[]string{"10.4.44.94", "10.61.98.0/24"},
+	)
+	want := "localhost,127.0.0.1,.internal.example,10.4.44.94,10.61.98.0/24"
+	if got != want {
+		t.Fatalf("merged bypass = %q, want %q", got, want)
+	}
+}
+
+func TestBuildChildEnvironmentDoesNotClearBypassByDefault(t *testing.T) {
+	environment, _ := buildChildEnvironment(
+		nil,
+		"127.0.0.1:1234",
+		filepath.Join(t.TempDir(), "missing-ca.pem"),
+		t.TempDir(),
+		nil,
+	)
+	got := environmentMap(environment)
+	for _, name := range []string{"NO_PROXY", "no_proxy", "no_grpc_proxy"} {
+		if _, exists := got[name]; exists {
+			t.Fatalf("%s should not be injected when no bypass is configured: %#v", name, got)
+		}
+	}
+}
+
+func TestBuildChildEnvironmentAppliesBypassToHTTPAndGRPC(t *testing.T) {
+	environment, _ := buildChildEnvironment(
+		[]string{"NO_PROXY=localhost"},
+		"127.0.0.1:1234",
+		filepath.Join(t.TempDir(), "missing-ca.pem"),
+		t.TempDir(),
+		[]string{"10.4.44.94", "10.61.98.0/24"},
+	)
+	got := environmentMap(environment)
+	want := "localhost,10.4.44.94,10.61.98.0/24"
+	for _, name := range []string{"NO_PROXY", "no_proxy", "no_grpc_proxy"} {
+		if got[name] != want {
+			t.Fatalf("%s = %q, want %q", name, got[name], want)
+		}
+	}
+}
+
+func TestJavaNonProxyHostsUsesJavaSeparators(t *testing.T) {
+	got := javaNonProxyHosts("localhost,.internal.example,10.4.44.94,10.61.98.0/24")
+	want := "localhost|*.internal.example|10.4.44.94|10.61.98.*"
+	if got != want {
+		t.Fatalf("Java non-proxy hosts = %q, want %q", got, want)
+	}
+}
+
 func TestProxyLifetimeEndsWhenStdinCloses(t *testing.T) {
 	stdinReader, stdinWriter := io.Pipe()
 	var stdout, stderr bytes.Buffer

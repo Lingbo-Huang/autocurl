@@ -36,6 +36,7 @@ func proxyCommand(
 
 	var replayHeaderValues stringList
 	var liveHeaderValues stringList
+	var bypassValues stringList
 	all := flags.Bool("all", true, "emit every captured request")
 	statusMin := flags.Int("status-min", 400, "minimum HTTP status considered a failure")
 	slow := flags.Duration("slow", 2*time.Second, "emit successful requests slower than this duration; 0 disables")
@@ -47,6 +48,7 @@ func proxyCommand(
 	lifetimeStdin := flags.Bool("lifetime-stdin", false, "stop when stdin closes; intended for IDE integrations")
 	flags.Var(&replayHeaderValues, "replay-header", "header added only to generated cURL; repeatable")
 	flags.Var(&liveHeaderValues, "live-header", "header injected into live traffic and generated cURL; repeatable")
+	flags.Var(&bypassValues, "bypass", "host, IP, domain suffix, or CIDR excluded from capture; repeatable")
 	flags.Usage = func() {
 		fmt.Fprint(flags.Output(), `Usage:
   autocurl [--json] proxy [options]
@@ -119,7 +121,7 @@ Examples:
 	}
 	defer session.Close()
 
-	environment, notes, environmentErr := session.Environment(nil)
+	environment, notes, environmentErr := session.Environment(nil, bypassValues)
 	if environmentErr != nil {
 		notes = append(notes, "Environment compatibility warning: "+environmentErr.Error())
 	}

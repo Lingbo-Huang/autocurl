@@ -16,6 +16,12 @@ The plugin creates a temporary copy of the selected configuration and injects
 only process-scoped proxy and trust variables. It does not persist changes to
 the original configuration or modify the operating-system proxy.
 
+Services that depend on mTLS, certificate pinning, or infrastructure that must
+remain direct should add those hosts/IPs under **Settings → Tools → Autocurl →
+Bypass capture**. Existing `NO_PROXY`, `no_proxy`, and `no_grpc_proxy` values
+are preserved. Bypassed calls are not captured; other outbound traffic remains
+visible.
+
 The matching open-source engine is downloaded from GitHub Releases and checked
 against `SHA256SUMS`. If a corporate network blocks downloads, install the
 engine once and set its path under **Settings → Tools → Autocurl**.

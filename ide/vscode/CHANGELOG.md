@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4
+
+- Preserve existing `NO_PROXY`, `no_proxy`, and `no_grpc_proxy` values.
+- Add `autocurl.bypassTargets` for mTLS and direct infrastructure calls.
+- Keep the IDE packages aligned with the 0.2.4 engine.
+
 ## 0.2.3
 
 - Discover the configured Go SDK when VS Code or Cursor is launched from a

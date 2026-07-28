@@ -29,7 +29,7 @@ overlay 传给本次 `go build`。它只修改临时运行配置，不会写回�
 
 ## VS Code / Cursor
 
-安装 `autocurl-0.2.3.vsix` 后，默认直接按 F5：
+安装 `autocurl-0.2.4.vsix` 后，默认直接按 F5：
 
 1. 插件自动启动后台捕获会话。
 2. 在调试程序启动前注入临时代理和证书环境。
@@ -57,6 +57,7 @@ overlay 传给本次 `go build`。它只修改临时运行配置，不会写回�
 | `autocurl.method` | 空 | 只显示指定方法 |
 | `autocurl.replayHeaders` | `[]` | 只给生成的 cURL 增加 Header |
 | `autocurl.liveHeaders` | `[]` | 给真实请求增加 Header，谨慎使用 |
+| `autocurl.bypassTargets` | `[]` | 绕过 mTLS 或必须直连的基础设施目标 |
 | `autocurl.showSecrets` | `false` | 关闭脱敏，不建议 |
 
 打包：
@@ -67,7 +68,7 @@ npm ci
 npm run package
 ```
 
-产物：`ide/vscode/autocurl-0.2.3.vsix`。
+产物：`ide/vscode/autocurl-0.2.4.vsix`。
 
 发布 VS Code Marketplace 需要创建 publisher 和凭据。Cursor 使用相同的
 VS Code 扩展格式，其扩展市场以 Open VSX 为底层来源。首次入驻、GitHub
@@ -95,6 +96,25 @@ Node.js、Gradle 等配置使用的环境变量接口并不完全相同；插件
 `getEnvs/setEnvs` 接口和 GoLand 的 `getCustomEnvironment/setCustomEnvironment`
 接口。极少数自定义配置不提供环境变量时，插件会显示其真实类名，便于继续适配。
 
+### mTLS、etcd 和必须直连的基础设施
+
+显式 HTTP 代理通过 TLS 中间人才能读取 HTTPS/gRPC 请求。mTLS 还要求客户端
+持有私钥，Autocurl 不会也无法从业务进程导出这把私钥，因此 mTLS 目标必须
+保持端到端直连。
+
+在 **Settings → Tools → Autocurl → Bypass capture** 中逐行填写需要绕过的
+域名、IP、域名后缀或 CIDR，例如：
+
+```text
+10.4.44.94
+10.61.98.0/24
+.infra.example.com
+```
+
+插件会把它们应用到 `NO_PROXY`、`no_proxy`、`no_grpc_proxy` 和 Java
+`http.nonProxyHosts`。Run Configuration 中已有的绕过项也会保留。绕过目标
+不会出现在捕获列表，其余调用继续捕获。
+
 断点在发送之前时，选中请求 JSON，右键执行
 **Render Selected Request JSON as cURL**。没有选区时会读取整个当前文档。
 这个操作不发网络，只生成并复制 cURL。
@@ -107,7 +127,7 @@ cd ide/jetbrains
 ```
 
 产物：
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.3.zip`。
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.4.zip`。
 
 使用本机 IDE 快速验证：
 
@@ -133,8 +153,10 @@ curl --noproxy '*' -v http://127.0.0.1:8080/
 ```
 
 如果普通 Run 能监听、只有 **Run Selected with Autocurl** 不能监听，请查看
-该 Run 窗口最末尾的启动异常，并在 Issue 中附上 Run Configuration 的类型和
-错误信息。Autocurl 自己监听 `127.0.0.1` 的随机空闲端口，不会占用 8080。
+该 Run 窗口最后一条启动日志。如果程序停在 etcd、gRPC、配置中心或其他 mTLS
+依赖初始化处，把对应地址加入 **Bypass capture** 后重新运行。仍不能监听时，
+在 Issue 中附上 Run Configuration 的类型和错误信息。Autocurl 自己监听
+`127.0.0.1` 的随机空闲端口，不会占用 8080。
 它捕获的是服务收到入站请求后“向外发出的 HTTP 调用”，不会把 Apifox 发给
 服务的入站请求显示为捕获项。
 

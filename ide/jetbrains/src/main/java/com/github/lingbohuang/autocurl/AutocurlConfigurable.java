@@ -24,6 +24,7 @@ public final class AutocurlConfigurable implements Configurable {
     private final JBCheckBox showSecrets = new JBCheckBox("Show secrets (unsafe)");
     private final JBTextArea replayHeaders = new JBTextArea(3, 40);
     private final JBTextArea liveHeaders = new JBTextArea(3, 40);
+    private final JBTextArea bypassTargets = new JBTextArea(3, 40);
     private JPanel panel;
 
     @Override
@@ -40,6 +41,9 @@ public final class AutocurlConfigurable implements Configurable {
                 .addLabeledComponent("HTTP method:", method)
                 .addLabeledComponent("Maximum body bytes:", maxBodyBytes)
                 .addComponent(showSecrets)
+                .addLabeledComponent(
+                        "Bypass capture (mTLS/infrastructure; one host, IP, domain suffix, or CIDR per line):",
+                        bypassTargets)
                 .addLabeledComponent("Replay-only headers (one per line):", replayHeaders)
                 .addLabeledComponent("Live headers (one per line):", liveHeaders)
                 .addComponentFillVertically(new JPanel(), 0)
@@ -57,6 +61,7 @@ public final class AutocurlConfigurable implements Configurable {
                 || !Objects.equals(method.getText().trim(), state.method)
                 || !Objects.equals(maxBodyBytes.getText().trim(), String.valueOf(state.maxBodyBytes))
                 || showSecrets.isSelected() != state.showSecrets
+                || !lines(bypassTargets.getText()).equals(state.bypassTargets)
                 || !lines(replayHeaders.getText()).equals(state.replayHeaders)
                 || !lines(liveHeaders.getText()).equals(state.liveHeaders);
     }
@@ -74,6 +79,7 @@ public final class AutocurlConfigurable implements Configurable {
             state.maxBodyBytes = 1024 * 1024;
         }
         state.showSecrets = showSecrets.isSelected();
+        state.bypassTargets = lines(bypassTargets.getText());
         state.replayHeaders = lines(replayHeaders.getText());
         state.liveHeaders = lines(liveHeaders.getText());
     }
@@ -87,6 +93,7 @@ public final class AutocurlConfigurable implements Configurable {
         method.setText(state.method);
         maxBodyBytes.setText(String.valueOf(state.maxBodyBytes));
         showSecrets.setSelected(state.showSecrets);
+        bypassTargets.setText(String.join("\n", state.bypassTargets));
         replayHeaders.setText(String.join("\n", state.replayHeaders));
         liveHeaders.setText(String.join("\n", state.liveHeaders));
     }

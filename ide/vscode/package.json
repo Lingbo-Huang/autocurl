@@ -2,7 +2,7 @@
   "name": "autocurl",
   "displayName": "Autocurl",
   "description": "Capture outbound requests from IDE debug sessions and copy complete replayable cURLs.",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "publisher": "lingbo-huang",
   "license": "MIT",
   "repository": {
@@ -126,6 +126,14 @@
           },
           "default": [],
           "description": "Headers injected into live requests. Use with care."
+        },
+        "autocurl.bypassTargets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Hosts, IPs, domain suffixes, or CIDRs excluded from capture for mTLS and direct infrastructure calls."
         },
         "autocurl.maxBodyBytes": {
           "type": "number",

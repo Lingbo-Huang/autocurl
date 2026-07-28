@@ -22,6 +22,7 @@ public final class AutocurlSettings implements PersistentStateComponent<Autocurl
         public boolean showSecrets = false;
         public List<String> replayHeaders = new ArrayList<>();
         public List<String> liveHeaders = new ArrayList<>();
+        public List<String> bypassTargets = new ArrayList<>();
         public boolean quickStartShown = false;
     }
 

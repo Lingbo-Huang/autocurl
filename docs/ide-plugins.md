@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.2.3.vsix` with
+Install `autocurl-0.2.4.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -55,6 +55,7 @@ Important settings:
 | `autocurl.method` | empty | Show only one HTTP method |
 | `autocurl.replayHeaders` | `[]` | Add headers only to generated cURLs |
 | `autocurl.liveHeaders` | `[]` | Inject headers into real traffic; use carefully |
+| `autocurl.bypassTargets` | `[]` | Keep mTLS/direct infrastructure targets outside capture |
 | `autocurl.showSecrets` | `false` | Disable safe redaction |
 
 The environment provider applies to IDE debug launches, including Run Without
@@ -69,7 +70,7 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.2.3.vsix`.
+Output: `ide/vscode/autocurl-0.2.4.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
@@ -85,7 +86,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.2.3.zip` with
+Install `autocurl-jetbrains-0.2.4.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -108,6 +109,15 @@ both the common `getEnvs/setEnvs` interface and GoLand's
 `getCustomEnvironment/setCustomEnvironment` interface. A specialized
 configuration that exposes no environment map receives a warning containing
 its concrete class name.
+
+### mTLS and direct infrastructure dependencies
+
+An explicit HTTPS/gRPC proxy must terminate TLS to inspect requests. It cannot
+reuse a client's private key, so mTLS endpoints must remain end-to-end.
+Configure hosts, IPs, domain suffixes, or CIDRs under **Settings → Tools →
+Autocurl → Bypass capture**. The plugin applies them to `NO_PROXY`, `no_proxy`,
+`no_grpc_proxy`, and Java `http.nonProxyHosts`, while preserving values already
+present in the Run Configuration. Bypassed traffic is not captured.
 
 The JetBrains plugin and the local engine are separate versioned components.
 The plugin version shown under **Settings → Plugins → Autocurl** belongs to the
@@ -137,7 +147,7 @@ cd ide/jetbrains
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.3.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.4.zip`.
 
 For a faster local API check against an installed product:
 
