@@ -36,10 +36,21 @@ func TestProxyHelpDocumentsIDEProtocol(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("exit code = %d", exitCode)
 	}
-	for _, wanted := range []string{"ready", "request", "--lifetime-stdin"} {
+	for _, wanted := range []string{"ready", "request", "-lifetime-stdin", "-mode"} {
 		if !strings.Contains(stderr.String(), wanted) {
 			t.Fatalf("proxy help does not contain %q:\n%s", wanted, stderr.String())
 		}
+	}
+}
+
+func TestProxyRejectsUnknownCaptureMode(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	exitCode := Run([]string{"proxy", "--mode", "surprise"}, &stdout, &stderr)
+	if exitCode != 2 {
+		t.Fatalf("exit code = %d, want 2", exitCode)
+	}
+	if !strings.Contains(stderr.String(), `--mode must be "safe" or "strict"`) {
+		t.Fatalf("unexpected mode error:\n%s", stderr.String())
 	}
 }
 
@@ -121,6 +132,39 @@ func TestEmitterKeepsProxyErrorsAsJSON(t *testing.T) {
 	}
 	if event.Type != "error" || event.Error != "proxy stopped unexpectedly" {
 		t.Fatalf("unexpected proxy error event: %#v", event)
+	}
+}
+
+func TestEmitterWritesActionableDiagnosticJSON(t *testing.T) {
+	var output bytes.Buffer
+	emitter := newEmitter(emitterOptions{
+		Writer: &output,
+		JSON:   true,
+		All:    true,
+	})
+	emitter.EmitDiagnostic(capture.Diagnostic{
+		Timestamp:       time.Now(),
+		Code:            "mtls_detected",
+		Severity:        "warning",
+		Host:            "api.internal.example:443",
+		Summary:         "Safe mode kept this TLS connection end-to-end",
+		Detail:          "the upstream requested a client certificate",
+		SuggestedAction: "Keep this host bypassed.",
+		BypassTarget:    "api.internal.example",
+		AutoApplied:     true,
+	})
+	var event struct {
+		Type         string `json:"type"`
+		Code         string `json:"code"`
+		BypassTarget string `json:"bypass_target"`
+		AutoApplied  bool   `json:"auto_applied"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &event); err != nil {
+		t.Fatalf("diagnostic output is not JSON: %v\n%s", err, output.String())
+	}
+	if event.Type != "diagnostic" || event.Code != "mtls_detected" ||
+		event.BypassTarget != "api.internal.example" || !event.AutoApplied {
+		t.Fatalf("unexpected diagnostic event: %#v", event)
 	}
 }
 
@@ -218,7 +262,8 @@ func TestProxyLifetimeEndsWhenStdinCloses(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &ready); err != nil {
 		t.Fatalf("ready output is not JSON: %v\n%s", err, stdout.String())
 	}
-	if ready.Type != "ready" || ready.ProxyURL == "" || len(ready.Environment) == 0 {
+	if ready.Type != "ready" || ready.ProxyURL == "" || len(ready.Environment) == 0 ||
+		ready.Mode != "safe" {
 		t.Fatalf("unexpected ready event: %#v", ready)
 	}
 }

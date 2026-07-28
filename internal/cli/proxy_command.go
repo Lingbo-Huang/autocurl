@@ -24,6 +24,7 @@ type proxyReadyEvent struct {
 	Environment       map[string]string `json:"environment"`
 	AppendEnvironment []string          `json:"append_environment,omitempty"`
 	Notes             []string          `json:"notes,omitempty"`
+	Mode              string            `json:"mode"`
 }
 
 type proxyControl struct {
@@ -50,6 +51,7 @@ func proxyCommand(
 	jsonOutput := flags.Bool("json", globalJSON, "emit stable JSON Lines on stdout")
 	match := flags.String("match", "", "emit only requests whose URL contains this text")
 	method := flags.String("method", "", "emit only requests with this HTTP method")
+	mode := flags.String("mode", string(capture.ModeSafe), `capture mode: "safe" bypasses incompatible TLS; "strict" forces interception`)
 	lifetimeStdin := flags.Bool("lifetime-stdin", false, "stop when stdin closes; intended for IDE integrations")
 	flags.Var(&replayHeaderValues, "replay-header", "header added only to generated cURL; repeatable")
 	flags.Var(&liveHeaderValues, "live-header", "header injected into live traffic and generated cURL; repeatable")
@@ -91,6 +93,11 @@ Examples:
 		fmt.Fprintln(stderr, "autocurl proxy: --max-body must be greater than zero")
 		return 2
 	}
+	captureMode, err := parseCaptureMode(*mode)
+	if err != nil {
+		fmt.Fprintf(stderr, "autocurl proxy: %v\n", err)
+		return 2
+	}
 	replayHeaders, err := parseHeaders(replayHeaderValues)
 	if err != nil {
 		fmt.Fprintf(stderr, "autocurl proxy: invalid --replay-header: %v\n", err)
@@ -116,9 +123,11 @@ Examples:
 		Method:           strings.ToUpper(strings.TrimSpace(*method)),
 	})
 	session, err := startCaptureSession(capture.Options{
-		LiveHeaders: liveHeaders,
-		MaxBody:     *maxBody,
-		OnEvent:     emitter.Emit,
+		LiveHeaders:  liveHeaders,
+		MaxBody:      *maxBody,
+		Mode:         captureMode,
+		OnEvent:      emitter.Emit,
+		OnDiagnostic: emitter.EmitDiagnostic,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "autocurl proxy: %v\n", err)
@@ -139,6 +148,7 @@ Examples:
 		Environment:       environmentMap(environment),
 		AppendEnvironment: []string{"GOFLAGS", "JAVA_TOOL_OPTIONS"},
 		Notes:             notes,
+		Mode:              string(captureMode),
 	}
 	if *jsonOutput {
 		if err := json.NewEncoder(stdout).Encode(ready); err != nil {

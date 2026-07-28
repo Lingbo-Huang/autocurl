@@ -161,6 +161,7 @@ func runCommand(arguments []string, globalJSON bool, stdout, stderr io.Writer) i
 	verbose := flags.Bool("verbose", false, "print proxy setup details")
 	match := flags.String("match", "", "emit only requests whose URL contains this text")
 	method := flags.String("method", "", "emit only requests with this HTTP method")
+	mode := flags.String("mode", string(capture.ModeSafe), `capture mode: "safe" bypasses incompatible TLS; "strict" forces interception`)
 	copyCurl := flags.Bool("copy", false, "copy each emitted cURL to the clipboard; the latest match remains")
 	outputPath := flags.String("output", "", "write the latest emitted cURL to this file")
 	flags.Var(&replayHeaderValues, "replay-header", "header added only to generated cURL; repeatable")
@@ -203,6 +204,11 @@ Examples:
 		fmt.Fprintln(stderr, "autocurl run: --max-body must be greater than zero")
 		return 2
 	}
+	captureMode, err := parseCaptureMode(*mode)
+	if err != nil {
+		fmt.Fprintf(stderr, "autocurl run: %v\n", err)
+		return 2
+	}
 
 	replayHeaders, err := parseHeaders(replayHeaderValues)
 	if err != nil {
@@ -235,9 +241,11 @@ Examples:
 	})
 
 	session, err := startCaptureSession(capture.Options{
-		LiveHeaders: liveHeaders,
-		MaxBody:     *maxBody,
-		OnEvent:     emitter.Emit,
+		LiveHeaders:  liveHeaders,
+		MaxBody:      *maxBody,
+		Mode:         captureMode,
+		OnEvent:      emitter.Emit,
+		OnDiagnostic: emitter.EmitDiagnostic,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "autocurl run: %v\n", err)
@@ -494,6 +502,50 @@ func (e *emitter) EmitState(recording bool) {
 	fmt.Fprintf(e.options.Writer, "[autocurl] capture is now %s\n", state)
 }
 
+func (e *emitter) EmitDiagnostic(diagnostic capture.Diagnostic) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.options.JSON {
+		_ = e.encoder.Encode(struct {
+			SchemaVersion   string `json:"schema_version"`
+			Type            string `json:"type"`
+			Timestamp       string `json:"timestamp"`
+			Code            string `json:"code"`
+			Severity        string `json:"severity"`
+			Host            string `json:"host,omitempty"`
+			Summary         string `json:"summary"`
+			Detail          string `json:"detail,omitempty"`
+			SuggestedAction string `json:"suggested_action,omitempty"`
+			BypassTarget    string `json:"bypass_target,omitempty"`
+			AutoApplied     bool   `json:"auto_applied,omitempty"`
+			RetryRequired   bool   `json:"retry_required,omitempty"`
+		}{
+			SchemaVersion:   "1",
+			Type:            "diagnostic",
+			Timestamp:       diagnostic.Timestamp.UTC().Format(time.RFC3339Nano),
+			Code:            diagnostic.Code,
+			Severity:        diagnostic.Severity,
+			Host:            diagnostic.Host,
+			Summary:         diagnostic.Summary,
+			Detail:          diagnostic.Detail,
+			SuggestedAction: diagnostic.SuggestedAction,
+			BypassTarget:    diagnostic.BypassTarget,
+			AutoApplied:     diagnostic.AutoApplied,
+			RetryRequired:   diagnostic.RetryRequired,
+		})
+		return
+	}
+	fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl] %s: %s\n",
+		fallback(diagnostic.Severity, "info"), diagnostic.Summary)
+	if diagnostic.Detail != "" {
+		fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl] %s\n", diagnostic.Detail)
+	}
+	if diagnostic.SuggestedAction != "" {
+		fmt.Fprintf(e.options.DiagnosticWriter, "[autocurl] action: %s\n", diagnostic.SuggestedAction)
+	}
+}
+
 func (e *emitter) shouldEmit(event capture.Event) bool {
 	if e.options.Match != "" && !strings.Contains(event.URL, e.options.Match) {
 		return false
@@ -625,6 +677,14 @@ func fallback(value, alternative string) string {
 		return alternative
 	}
 	return value
+}
+
+func parseCaptureMode(value string) (capture.Mode, error) {
+	mode := capture.Mode(strings.ToLower(strings.TrimSpace(value)))
+	if mode != capture.ModeSafe && mode != capture.ModeStrict {
+		return "", fmt.Errorf(`--mode must be "safe" or "strict"`)
+	}
+	return mode, nil
 }
 
 func createJavaTruststore(caPath, tempDirectory string) (string, error) {

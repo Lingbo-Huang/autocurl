@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,26 +37,64 @@ type Event struct {
 	Error         error
 }
 
+type Mode string
+
+const (
+	ModeSafe   Mode = "safe"
+	ModeStrict Mode = "strict"
+)
+
+type Diagnostic struct {
+	Timestamp       time.Time
+	Code            string
+	Severity        string
+	Host            string
+	Summary         string
+	Detail          string
+	SuggestedAction string
+	BypassTarget    string
+	AutoApplied     bool
+	RetryRequired   bool
+}
+
+type TLSProbeResult struct {
+	Bypass bool
+	Code   string
+	Detail string
+}
+
+type TLSProbe func(context.Context, string) TLSProbeResult
+
 type Options struct {
 	Authority    *Authority
 	LiveHeaders  []config.Header
 	MaxBody      int64
+	Mode         Mode
 	OnEvent      func(Event)
+	OnDiagnostic func(Diagnostic)
 	Transport    http.RoundTripper
 	H2CTransport http.RoundTripper
+	TLSProbe     TLSProbe
 }
 
 type Proxy struct {
-	authority    *Authority
-	liveHeaders  []config.Header
-	maxBody      int64
-	onEvent      func(Event)
-	transport    http.RoundTripper
-	h2cTransport http.RoundTripper
-	server       *http.Server
-	listener     net.Listener
-	closeOnce    sync.Once
-	recording    atomic.Bool
+	authority      *Authority
+	liveHeaders    []config.Header
+	maxBody        int64
+	mode           Mode
+	onEvent        func(Event)
+	onDiagnostic   func(Diagnostic)
+	transport      http.RoundTripper
+	h2cTransport   http.RoundTripper
+	tlsProbe       TLSProbe
+	server         *http.Server
+	listener       net.Listener
+	closeOnce      sync.Once
+	recording      atomic.Bool
+	tlsMu          sync.Mutex
+	tlsDecisions   map[string]TLSProbeResult
+	diagnosticMu   sync.Mutex
+	diagnosticSeen map[string]struct{}
 }
 
 func NewProxy(options Options) (*Proxy, error) {
@@ -66,6 +106,18 @@ func NewProxy(options Options) (*Proxy, error) {
 	}
 	if options.OnEvent == nil {
 		options.OnEvent = func(Event) {}
+	}
+	if options.Mode == "" {
+		options.Mode = ModeStrict
+	}
+	if options.Mode != ModeSafe && options.Mode != ModeStrict {
+		return nil, fmt.Errorf("unsupported capture mode %q", options.Mode)
+	}
+	if options.OnDiagnostic == nil {
+		options.OnDiagnostic = func(Diagnostic) {}
+	}
+	if options.TLSProbe == nil {
+		options.TLSProbe = probeTLSCompatibility
 	}
 	if options.Transport == nil {
 		options.Transport = &http.Transport{
@@ -91,12 +143,17 @@ func NewProxy(options Options) (*Proxy, error) {
 	}
 
 	proxy := &Proxy{
-		authority:    options.Authority,
-		liveHeaders:  options.LiveHeaders,
-		maxBody:      options.MaxBody,
-		onEvent:      options.OnEvent,
-		transport:    options.Transport,
-		h2cTransport: options.H2CTransport,
+		authority:      options.Authority,
+		liveHeaders:    options.LiveHeaders,
+		maxBody:        options.MaxBody,
+		mode:           options.Mode,
+		onEvent:        options.OnEvent,
+		onDiagnostic:   options.OnDiagnostic,
+		transport:      options.Transport,
+		h2cTransport:   options.H2CTransport,
+		tlsProbe:       options.TLSProbe,
+		tlsDecisions:   make(map[string]TLSProbeResult),
+		diagnosticSeen: make(map[string]struct{}),
 	}
 	proxy.recording.Store(true)
 	proxy.server = &http.Server{
@@ -286,7 +343,78 @@ func (p *Proxy) serveConnect(rawConnection net.Conn, host string) {
 		p.serveHTTP2(connection, host, "http")
 		return
 	}
+	if p.mode == ModeSafe {
+		if decision := p.tlsDecision(host); decision.Bypass {
+			p.tunnel(rawConnection, connection, host, decision)
+			return
+		}
+	}
 	p.serveTLS(connection, host)
+}
+
+func (p *Proxy) tlsDecision(address string) TLSProbeResult {
+	p.tlsMu.Lock()
+	cached, exists := p.tlsDecisions[address]
+	p.tlsMu.Unlock()
+	if exists {
+		return cached
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	decision := p.tlsProbe(ctx, connectAddress(address))
+	if decision.Bypass {
+		if decision.Code == "" {
+			decision.Code = "tls_interception_unsupported"
+		}
+		p.tlsMu.Lock()
+		p.tlsDecisions[address] = decision
+		p.tlsMu.Unlock()
+	}
+	return decision
+}
+
+func (p *Proxy) tunnel(
+	downstream net.Conn,
+	downstreamReader io.Reader,
+	address string,
+	decision TLSProbeResult,
+) {
+	target := connectAddress(address)
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	upstream, err := dialer.Dial("tcp", target)
+	if err != nil {
+		p.emitDiagnostic(Diagnostic{
+			Timestamp:       time.Now(),
+			Code:            "upstream_unreachable",
+			Severity:        "error",
+			Host:            address,
+			Summary:         "Autocurl could not reach the upstream service",
+			Detail:          err.Error(),
+			SuggestedAction: "Check DNS, VPN, service availability, and the destination port.",
+			BypassTarget:    bypassTarget(address),
+		})
+		return
+	}
+	p.emitDiagnostic(Diagnostic{
+		Timestamp:       time.Now(),
+		Code:            decision.Code,
+		Severity:        "warning",
+		Host:            address,
+		Summary:         "Safe mode kept this TLS connection end-to-end",
+		Detail:          decision.Detail,
+		SuggestedAction: "The application keeps working, but this host is not captured. Use Strict Capture only if the destination can be intercepted safely.",
+		BypassTarget:    bypassTarget(address),
+		AutoApplied:     true,
+	})
+	relayDuplex(downstream, downstreamReader, upstream)
+}
+
+func (p *Proxy) emitDiagnostic(diagnostic Diagnostic) {
+	if diagnostic.Timestamp.IsZero() {
+		diagnostic.Timestamp = time.Now()
+	}
+	p.onDiagnostic(diagnostic)
 }
 
 func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
@@ -301,6 +429,32 @@ func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
 		NextProtos:   []string{"h2", "http/1.1"},
 	})
 	if err := tlsConnection.Handshake(); err != nil {
+		if looksLikeClientCertificateRequired(err) {
+			autoApplied := p.mode == ModeSafe
+			if autoApplied {
+				p.rememberTLSBypass(host, TLSProbeResult{
+					Bypass: true,
+					Code:   "client_rejected_ca",
+					Detail: "the client rejected the temporary capture certificate: " + err.Error(),
+				})
+			}
+			action := "Add this host to Bypass capture and rerun the application."
+			if autoApplied {
+				action = "Retry the request. Safe mode will keep the next connection end-to-end; add the host to Bypass capture to preserve this across runs."
+			}
+			p.emitDiagnostic(Diagnostic{
+				Timestamp:       time.Now(),
+				Code:            "client_rejected_ca",
+				Severity:        "warning",
+				Host:            host,
+				Summary:         "The client rejected Autocurl's temporary TLS certificate",
+				Detail:          err.Error(),
+				SuggestedAction: action,
+				BypassTarget:    bypassTarget(host),
+				AutoApplied:     autoApplied,
+				RetryRequired:   true,
+			})
+		}
 		p.emit(Event{Timestamp: time.Now(), Error: fmt.Errorf("TLS handshake for %s: %w", host, err)})
 		return
 	}
@@ -384,6 +538,86 @@ func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
 	}
 }
 
+func (p *Proxy) rememberTLSBypass(address string, decision TLSProbeResult) {
+	p.tlsMu.Lock()
+	defer p.tlsMu.Unlock()
+	p.tlsDecisions[address] = decision
+}
+
+func probeTLSCompatibility(ctx context.Context, address string) TLSProbeResult {
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	raw, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return TLSProbeResult{
+			Code:   "upstream_unreachable",
+			Detail: err.Error(),
+		}
+	}
+	defer raw.Close()
+
+	serverName := bypassTarget(address)
+	connection := tls.Client(raw, &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		ServerName: serverName,
+		NextProtos: []string{"h2", "http/1.1"},
+	})
+	if err := connection.HandshakeContext(ctx); err != nil {
+		var unknownAuthority x509.UnknownAuthorityError
+		var invalidCertificate x509.CertificateInvalidError
+		switch {
+		case errors.As(err, &unknownAuthority), errors.As(err, &invalidCertificate):
+			return TLSProbeResult{
+				Bypass: true,
+				Code:   "upstream_tls_untrusted",
+				Detail: "the Autocurl engine cannot verify the upstream certificate: " + err.Error(),
+			}
+		case looksLikeClientCertificateRequired(err):
+			return TLSProbeResult{
+				Bypass: true,
+				Code:   "mtls_detected",
+				Detail: "the upstream TLS handshake requires or rejects a missing client certificate: " + err.Error(),
+			}
+		default:
+			return TLSProbeResult{
+				Bypass: true,
+				Code:   "tls_interception_unsupported",
+				Detail: "the upstream TLS handshake is not safely interceptable: " + err.Error(),
+			}
+		}
+	}
+	return TLSProbeResult{}
+}
+
+func looksLikeClientCertificateRequired(err error) bool {
+	message := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"certificate required",
+		"bad certificate",
+		"unknown certificate",
+		"certificate unknown",
+	} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func connectAddress(address string) string {
+	if _, _, err := net.SplitHostPort(address); err == nil {
+		return address
+	}
+	return net.JoinHostPort(strings.Trim(address, "[]"), "443")
+}
+
+func bypassTarget(address string) string {
+	host, _, err := net.SplitHostPort(connectAddress(address))
+	if err == nil {
+		return strings.Trim(host, "[]")
+	}
+	return strings.Trim(address, "[]")
+}
+
 func (p *Proxy) serveHTTP2(connection net.Conn, host, scheme string) {
 	server := &http2.Server{}
 	server.ServeConn(connection, &http2.ServeConnOpts{
@@ -431,6 +665,9 @@ func (p *Proxy) roundTrip(incoming *http.Request, scheme string) (*http.Response
 	}
 	response, err := transport.RoundTrip(request)
 	duration := time.Since(started)
+	if err != nil {
+		p.emitDiagnosticOnce(diagnoseTransportError(request.URL.String(), err))
+	}
 
 	status := 0
 	if response != nil {
@@ -451,6 +688,67 @@ func (p *Proxy) roundTrip(incoming *http.Request, scheme string) (*http.Response
 		event.UpstreamProto = response.Proto
 	}
 	return response, event, capturedBody
+}
+
+func (p *Proxy) emitDiagnosticOnce(diagnostic Diagnostic) {
+	key := diagnostic.Code + "\x00" + diagnostic.Host
+	p.diagnosticMu.Lock()
+	_, exists := p.diagnosticSeen[key]
+	if !exists {
+		p.diagnosticSeen[key] = struct{}{}
+	}
+	p.diagnosticMu.Unlock()
+	if !exists {
+		p.emitDiagnostic(diagnostic)
+	}
+}
+
+func diagnoseTransportError(rawURL string, err error) Diagnostic {
+	host := ""
+	if parsed, parseErr := url.Parse(rawURL); parseErr == nil {
+		host = parsed.Hostname()
+	}
+	diagnostic := Diagnostic{
+		Timestamp:    time.Now(),
+		Severity:     "error",
+		Host:         host,
+		Detail:       err.Error(),
+		BypassTarget: host,
+	}
+	message := strings.ToLower(err.Error())
+	var unknownAuthority x509.UnknownAuthorityError
+	var invalidCertificate x509.CertificateInvalidError
+	switch {
+	case looksLikeClientCertificateRequired(err):
+		diagnostic.Code = "mtls_detected"
+		diagnostic.Summary = "The upstream TLS service appears to require a client certificate"
+		diagnostic.SuggestedAction = "Use Safe mode or add this host to Bypass capture, then retry or restart the application."
+	case errors.As(err, &unknownAuthority), errors.As(err, &invalidCertificate):
+		diagnostic.Code = "upstream_tls_untrusted"
+		diagnostic.Summary = "The Autocurl engine could not verify the upstream certificate"
+		diagnostic.SuggestedAction = "Use Safe mode to preserve the application's own trust handling, or install the upstream CA for the Autocurl engine."
+	case strings.Contains(message, "connection refused"):
+		diagnostic.Code = "upstream_connection_refused"
+		diagnostic.Summary = "The destination rejected the connection"
+		diagnostic.SuggestedAction = "Confirm the destination process is listening on the reported host and port."
+	case strings.Contains(message, "no such host"),
+		strings.Contains(message, "server misbehaving"),
+		strings.Contains(message, "name or service not known"):
+		diagnostic.Code = "dns_failed"
+		diagnostic.Summary = "The destination hostname could not be resolved"
+		diagnostic.SuggestedAction = "Check DNS, VPN, hosts-file, and service-discovery configuration."
+	case errors.Is(err, context.DeadlineExceeded),
+		strings.Contains(message, "i/o timeout"),
+		strings.Contains(message, "deadline exceeded"):
+		diagnostic.Code = "upstream_timeout"
+		diagnostic.Summary = "The upstream connection timed out"
+		diagnostic.SuggestedAction = "Check VPN, firewall, upstream health, and whether this target must bypass capture."
+	default:
+		diagnostic.Code = "upstream_request_failed"
+		diagnostic.Summary = "The proxied upstream request failed"
+		diagnostic.SuggestedAction = "Open the diagnostic detail, verify the destination, and add a bypass only when TLS interception is incompatible."
+	}
+	return diagnostic
 }
 
 type limitedBuffer struct {
