@@ -12,13 +12,13 @@ changing application code.
 
 The same Go capture engine now powers two thin IDE plugins:
 
-- **VS Code and Cursor:** install `autocurl-0.2.1.vsix` from
+- **VS Code and Cursor:** install `autocurl-0.2.2.vsix` from
   [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases). Start
   debugging normally. Capture starts automatically, and requests appear under
   **Explorer → Autocurl Requests**. Click a request to inspect it or click its
   action to copy the complete cURL.
 - **IntelliJ IDEA, GoLand, PyCharm, WebStorm, and other JetBrains IDEs:**
-  install `autocurl-jetbrains-0.2.1.zip` with
+  install `autocurl-jetbrains-0.2.2.zip` with
   **Settings → Plugins → ⚙ → Install Plugin from Disk**. Select an existing
   Run/Debug Configuration, then choose
   **Run → Run Selected with Autocurl** or
@@ -46,7 +46,9 @@ If execution is paused before the network call, select a JSON object containing
 without sending a request.
 
 See the [IDE plugin guide](docs/ide-plugins.md) for installation, settings,
-architecture, packaging, and marketplace publication.
+architecture, and packaging. Maintainers can use the
+[marketplace publication runbook](docs/marketplace-publishing.zh-CN.md) for
+one-time account setup and automated tagged releases.
 
 ## One-minute workflow: capture and copy one request
 
@@ -424,7 +426,7 @@ optional `warning`, and copy/output status. Fields may be added compatibly;
 {
   "schema_version": "1",
   "type": "ready",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "proxy_url": "http://127.0.0.1:54321",
   "ca_file": "/tmp/autocurl-.../autocurl-ca.pem",
   "environment": {

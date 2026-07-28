@@ -1,0 +1,205 @@
+name: Publish IDE Marketplaces
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Existing Git release tag to publish
+        required: true
+        type: string
+      target:
+        description: Marketplace target
+        required: false
+        default: all
+        type: string
+    secrets:
+      JETBRAINS_PUBLISH_TOKEN:
+        required: false
+      JETBRAINS_CERTIFICATE_CHAIN:
+        required: false
+      JETBRAINS_PRIVATE_KEY:
+        required: false
+      JETBRAINS_PRIVATE_KEY_PASSWORD:
+        required: false
+      VSCE_PAT:
+        required: false
+      OVSX_PAT:
+        required: false
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Git release tag to publish, for example v0.2.3
+        required: true
+        type: string
+      target:
+        description: Retry one marketplace or publish every configured target
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - jetbrains
+          - vscode
+          - openvsx
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      TARGET: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ide/vscode/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Validate tag, versions, and configured credentials
+        shell: bash
+        env:
+          JETBRAINS_PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
+          JETBRAINS_CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
+          JETBRAINS_PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
+          JETBRAINS_PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          bash scripts/check-release-version.sh "${RELEASE_TAG}"
+
+          case "${TARGET}" in
+            all|jetbrains|vscode|openvsx) ;;
+            *)
+              echo "Unsupported marketplace target: ${TARGET}" >&2
+              exit 1
+              ;;
+          esac
+
+          jetbrains_ready=false
+          if [[ -n "${JETBRAINS_PUBLISH_TOKEN}" \
+             && -n "${JETBRAINS_CERTIFICATE_CHAIN}" \
+             && -n "${JETBRAINS_PRIVATE_KEY}" \
+             && -n "${JETBRAINS_PRIVATE_KEY_PASSWORD}" ]]; then
+            jetbrains_ready=true
+          fi
+          vscode_ready=false
+          [[ -n "${VSCE_PAT}" ]] && vscode_ready=true
+          openvsx_ready=false
+          [[ -n "${OVSX_PAT}" ]] && openvsx_ready=true
+
+          {
+            echo "RELEASE_VERSION=${RELEASE_TAG#v}"
+            echo "JETBRAINS_READY=${jetbrains_ready}"
+            echo "VSCODE_READY=${vscode_ready}"
+            echo "OPENVSX_READY=${openvsx_ready}"
+          } >> "${GITHUB_ENV}"
+
+          if [[ "${TARGET}" == "jetbrains" && "${jetbrains_ready}" != "true" ]]; then
+            echo "JetBrains publishing requires all four JETBRAINS_* secrets." >&2
+            exit 1
+          fi
+          if [[ "${TARGET}" == "vscode" && "${vscode_ready}" != "true" ]]; then
+            echo "VS Code Marketplace publishing requires VSCE_PAT." >&2
+            exit 1
+          fi
+          if [[ "${TARGET}" == "openvsx" && "${openvsx_ready}" != "true" ]]; then
+            echo "Open VSX publishing requires OVSX_PAT." >&2
+            exit 1
+          fi
+
+          if [[ "${TARGET}" == "all" ]]; then
+            [[ "${jetbrains_ready}" == "true" ]] \
+              || echo "::warning::Skipping JetBrains Marketplace: signing/publish secrets are incomplete."
+            [[ "${vscode_ready}" == "true" ]] \
+              || echo "::warning::Skipping VS Code Marketplace: VSCE_PAT is not configured."
+            [[ "${openvsx_ready}" == "true" ]] \
+              || echo "::warning::Skipping Open VSX: OVSX_PAT is not configured."
+          fi
+
+      - name: Install VS Code extension dependencies
+        if: ${{ inputs.target == 'all' || inputs.target == 'vscode' || inputs.target == 'openvsx' }}
+        working-directory: ide/vscode
+        run: npm ci
+
+      - name: Build and verify VSIX
+        if: ${{ inputs.target == 'all' || inputs.target == 'vscode' || inputs.target == 'openvsx' }}
+        working-directory: ide/vscode
+        run: npm run package
+
+      - name: Build and verify JetBrains plugin
+        if: ${{ inputs.target == 'all' || inputs.target == 'jetbrains' }}
+        working-directory: ide/jetbrains
+        run: ./gradlew buildPlugin verifyPluginStructure verifyPluginProjectConfiguration
+
+      - name: Prepare JetBrains signing files
+        if: ${{ (inputs.target == 'all' || inputs.target == 'jetbrains') && env.JETBRAINS_READY == 'true' }}
+        shell: bash
+        env:
+          JETBRAINS_CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
+          JETBRAINS_PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          signing_directory="${RUNNER_TEMP}/autocurl-signing"
+          mkdir -p "${signing_directory}"
+          printf '%s' "${JETBRAINS_CERTIFICATE_CHAIN}" > "${signing_directory}/chain.crt"
+          printf '%s' "${JETBRAINS_PRIVATE_KEY}" > "${signing_directory}/private.pem"
+          {
+            echo "CERTIFICATE_CHAIN_FILE=${signing_directory}/chain.crt"
+            echo "PRIVATE_KEY_FILE=${signing_directory}/private.pem"
+          } >> "${GITHUB_ENV}"
+
+      - name: Publish JetBrains Marketplace
+        if: ${{ (inputs.target == 'all' || inputs.target == 'jetbrains') && env.JETBRAINS_READY == 'true' }}
+        working-directory: ide/jetbrains
+        env:
+          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
+        run: ./gradlew publishPlugin
+
+      - name: Publish VS Code Marketplace
+        if: ${{ (inputs.target == 'all' || inputs.target == 'vscode') && env.VSCODE_READY == 'true' }}
+        working-directory: ide/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx vsce publish --packagePath "autocurl-${RELEASE_VERSION}.vsix"
+
+      - name: Publish Open VSX
+        if: ${{ (inputs.target == 'all' || inputs.target == 'openvsx') && env.OPENVSX_READY == 'true' }}
+        working-directory: ide/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx ovsx publish --skip-duplicate "autocurl-${RELEASE_VERSION}.vsix"
+
+      - name: Write publication summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## IDE marketplace publication"
+            echo
+            echo "- Tag: \`${RELEASE_TAG}\`"
+            echo "- Requested target: \`${TARGET}\`"
+            echo "- JetBrains credentials ready: \`${JETBRAINS_READY:-false}\`"
+            echo "- VS Code credentials ready: \`${VSCODE_READY:-false}\`"
+            echo "- Open VSX credentials ready: \`${OPENVSX_READY:-false}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

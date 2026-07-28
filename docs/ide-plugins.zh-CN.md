@@ -18,7 +18,7 @@ IDE 插件只负责开始/停止、注入调试环境、展示请求和复制。
 
 ## VS Code / Cursor
 
-安装 `autocurl-0.2.1.vsix` 后，默认直接按 F5：
+安装 `autocurl-0.2.2.vsix` 后，默认直接按 F5：
 
 1. 插件自动启动后台捕获会话。
 2. 在调试程序启动前注入临时代理和证书环境。
@@ -56,10 +56,12 @@ npm ci
 npm run package
 ```
 
-产物：`ide/vscode/autocurl-0.2.1.vsix`。
+产物：`ide/vscode/autocurl-0.2.2.vsix`。
 
-发布 VS Code Marketplace 需要创建 publisher 和 token。Cursor 使用相同的
-VS Code 扩展格式，可以直接安装 VSIX；后续可以再发布到 Open VSX。
+发布 VS Code Marketplace 需要创建 publisher 和凭据。Cursor 使用相同的
+VS Code 扩展格式，其扩展市场以 Open VSX 为底层来源。首次入驻、GitHub
+Secrets 和打 tag 自动发布的完整步骤见
+[IDE 市场上架与自动升级](marketplace-publishing.zh-CN.md)。
 
 ## IntelliJ IDEA / GoLand / PyCharm / WebStorm
 
@@ -94,7 +96,7 @@ cd ide/jetbrains
 ```
 
 产物：
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.1.zip`。
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.2.zip`。
 
 使用本机 IDE 快速验证：
 
@@ -105,7 +107,37 @@ AUTOCURL_LOCAL_IDE="/Applications/GoLand.app" \
 
 发布 JetBrains Marketplace 使用 `./gradlew publishPlugin`，通过环境变量
 `PUBLISH_TOKEN` 提供凭据。公开上架还需要 JetBrains vendor profile、协议、
-商店资料和人工审核。
+商店资料和人工审核。JetBrains 强制首个版本人工上传，后续版本已经由 Release
+工作流自动发布；详见
+[IDE 市场上架与自动升级](marketplace-publishing.zh-CN.md)。
+
+### 服务端启动后访问 127.0.0.1 被拒绝
+
+`connect ECONNREFUSED 127.0.0.1:8080` 表示 8080 当时没有监听进程，不是
+Autocurl 生成 cURL 失败。先在终端检查：
+
+```bash
+lsof -nP -iTCP:8080 -sTCP:LISTEN
+curl --noproxy '*' -v http://127.0.0.1:8080/
+```
+
+如果普通 Run 能监听、只有 **Run Selected with Autocurl** 不能监听，请查看
+该 Run 窗口最末尾的启动异常，并在 Issue 中附上 Run Configuration 的类型和
+错误信息。Autocurl 自己监听 `127.0.0.1` 的随机空闲端口，不会占用 8080。
+它捕获的是服务收到入站请求后“向外发出的 HTTP 调用”，不会把 Apifox 发给
+服务的入站请求显示为捕获项。
+
+### Go HTTPS 报临时 CA 不受信任
+
+如果 Go 程序出现下面的错误：
+
+```text
+tls: failed to verify certificate: x509: “example.com” certificate is not trusted
+```
+
+先确认使用的是 0.2.2 或更高版本的 IDE 插件和引擎。0.2.1 插件曾错误地继续
+复用 0.2.0 引擎，而 0.2.0 在 macOS 上没有 Go build-process CA overlay。
+0.2.2 开始，插件与引擎版本必须匹配，旧的托管引擎会被自动替换。
 
 ## 引擎自动下载与安全
 
@@ -117,7 +149,7 @@ AUTOCURL_LOCAL_IDE="/Applications/GoLand.app" \
 4. GitHub 最新兼容 Release。
 
 下载时按 macOS/Linux/Windows 与 amd64/arm64 选择压缩包，并核对
-`SHA256SUMS`。要求引擎版本不低于 0.2.0。
+`SHA256SUMS`。IDE 包要求匹配的引擎版本，避免继续复用缺少运行时修复的旧缓存。
 
 IDE 协议的 `ready.environment` 只包含新生成的覆盖值，不会把 IDE 父进程的
 环境变量或密钥输出到 JSON。`GOFLAGS` 和 `JAVA_TOOL_OPTIONS` 标记为追加，

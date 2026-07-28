@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Require the matching Autocurl engine so macOS Go HTTPS capture gets the
+  process-scoped CA trust fix.
+- Add automated Visual Studio Marketplace and Open VSX publishing.
+- Add release version guards shared with the JetBrains plugin.
+
 ## 0.2.1
 
 - Keep the IDE packages aligned with the Autocurl 0.2.1 engine release.
