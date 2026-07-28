@@ -2,7 +2,7 @@
   "name": "autocurl",
   "displayName": "Autocurl",
   "description": "Capture outbound requests from IDE debug sessions and copy complete replayable cURLs.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "lingbo-huang",
   "license": "MIT",
   "repository": {

@@ -32,13 +32,17 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
         DefaultListModel<CaptureSession.RequestEvent> model = new DefaultListModel<>();
         session.requests().forEach(model::addElement);
         JBList<CaptureSession.RequestEvent> list = new JBList<>(model);
+        list.getEmptyText().setText(
+                "暂无请求：先选择 Run/Debug Configuration，再点击 Run Selected 或 Debug Selected"
+        );
         JBTextArea curl = new JBTextArea();
         curl.setEditable(false);
         curl.setLineWrap(false);
         curl.setBorder(JBUI.Borders.empty(8));
+        curl.setText(AutocurlHelp.TOOL_WINDOW_GUIDE);
         list.addListSelectionListener(event -> {
             CaptureSession.RequestEvent selected = list.getSelectedValue();
-            curl.setText(selected == null ? "" : selected.curl());
+            curl.setText(selected == null ? AutocurlHelp.TOOL_WINDOW_GUIDE : selected.curl());
             curl.setCaretPosition(0);
         });
         list.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -65,11 +69,14 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
         copy.addActionListener(event -> copySelected(list));
         JButton render = new JButton("Render JSON");
         render.addActionListener(event -> RenderSelectedRequestAction.renderEditorRequest(project));
+        JButton help = new JButton("Quick Start / 使用说明");
+        help.addActionListener(event -> AutocurlHelp.show(project));
         JButton clear = new JButton("Clear");
         clear.addActionListener(event -> {
             session.clear();
             model.clear();
-            curl.setText("");
+            curl.setText(AutocurlHelp.TOOL_WINDOW_GUIDE);
+            curl.setCaretPosition(0);
         });
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
@@ -78,6 +85,7 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
         toolbar.add(stop);
         toolbar.add(copy);
         toolbar.add(render);
+        toolbar.add(help);
         toolbar.add(clear);
         toolbar.add(status);
 

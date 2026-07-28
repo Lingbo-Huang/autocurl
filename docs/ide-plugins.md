@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.2.0.vsix` with
+Install `autocurl-0.2.1.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -69,7 +69,7 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.2.0.vsix`.
+Output: `ide/vscode/autocurl-0.2.1.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
@@ -82,7 +82,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.2.0.zip` with
+Install `autocurl-jetbrains-0.2.1.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -94,11 +94,17 @@ Default workflow:
    launches it with the normal IDE runner.
 4. Open the **Autocurl** tool window to inspect and copy requests.
 
+To verify the GoLand integration immediately, run
+[`examples/go-http-client`](../examples/go-http-client/README.md). It sends a
+GET with query parameters and a POST with a nested JSON body, both carrying
+`get-info: true`.
+
 The original configuration is not persisted with proxy values. Run
-configurations implementing IntelliJ's standard environment interface are
-supported; this covers the common Java, Go, Python, Node.js, and build-tool
-configurations. A specialized configuration that exposes no environment map
-will receive an explicit warning.
+configurations use more than one environment interface. The plugin supports
+both the common `getEnvs/setEnvs` interface and GoLand's
+`getCustomEnvironment/setCustomEnvironment` interface. A specialized
+configuration that exposes no environment map receives a warning containing
+its concrete class name.
 
 When a breakpoint is before send, select request JSON in an editor and use
 **Render Selected Request JSON as cURL**. The entire JSON document is used when
@@ -114,7 +120,7 @@ cd ide/jetbrains
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.0.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.1.zip`.
 
 For a faster local API check against an installed product:
 

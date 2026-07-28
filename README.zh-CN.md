@@ -9,7 +9,7 @@
 ### VS Code / Cursor
 
 1. 从 [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases)
-   下载 `autocurl-0.2.0.vsix`。
+   下载 `autocurl-0.2.1.vsix`。
 2. 在命令面板执行 **Extensions: Install from VSIX...**。
 3. 像平时一样点击 Debug 或按 F5。
 4. 打开 **Explorer → Autocurl Requests**。点击某个请求查看完整 cURL，
@@ -20,7 +20,7 @@
 
 ### IntelliJ IDEA / GoLand / PyCharm / WebStorm
 
-1. 从 Releases 下载 `autocurl-jetbrains-0.2.0.zip`。
+1. 从 Releases 下载 `autocurl-jetbrains-0.2.1.zip`。
 2. 打开 **Settings → Plugins → ⚙ → Install Plugin from Disk**。
 3. 选择已有的 Run/Debug Configuration。
 4. 使用 **Run → Run Selected with Autocurl** 或
@@ -29,6 +29,10 @@
 
 JetBrains 插件会复制一个临时运行配置并注入代理环境，不会永久修改原有
 Run Configuration。
+
+GoLand 用户可以直接运行
+[`examples/go-http-client`](examples/go-http-client/README.md) 验证。示例会发出
+一个带 Query 的 GET 和一个带嵌套 JSON Body 的 POST。
 
 两个插件首次使用时都会从 GitHub Release 下载匹配当前操作系统和 CPU 的
 Go 引擎，并使用 `SHA256SUMS` 校验。如果公司网络不能访问 GitHub，可以只安装

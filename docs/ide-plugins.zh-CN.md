@@ -18,7 +18,7 @@ IDE 插件只负责开始/停止、注入调试环境、展示请求和复制。
 
 ## VS Code / Cursor
 
-安装 `autocurl-0.2.0.vsix` 后，默认直接按 F5：
+安装 `autocurl-0.2.1.vsix` 后，默认直接按 F5：
 
 1. 插件自动启动后台捕获会话。
 2. 在调试程序启动前注入临时代理和证书环境。
@@ -56,7 +56,7 @@ npm ci
 npm run package
 ```
 
-产物：`ide/vscode/autocurl-0.2.0.vsix`。
+产物：`ide/vscode/autocurl-0.2.1.vsix`。
 
 发布 VS Code Marketplace 需要创建 publisher 和 token。Cursor 使用相同的
 VS Code 扩展格式，可以直接安装 VSIX；后续可以再发布到 Open VSX。
@@ -73,9 +73,14 @@ VS Code 扩展格式，可以直接安装 VSIX；后续可以再发布到 Open V
 3. 插件创建临时配置、注入环境并用 IDE 原生 Runner 启动。
 4. 在 **Autocurl** Tool Window 查看、选择、复制请求。
 
+想立即验证 GoLand 插件，可以直接运行仓库中的
+[`examples/go-http-client`](../examples/go-http-client/README.md)。它会发出一个
+带 Query 的 GET 和一个带嵌套 JSON Body 的 POST，并携带 `get-info: true`。
+
 原始 Run Configuration 不会被写入代理配置。常见 Java、Go、Python、
-Node.js、Gradle 等配置都提供标准环境变量接口；极少数自定义配置不提供时，
-插件会明确提示，而不是静默启动后抓不到请求。
+Node.js、Gradle 等配置使用的环境变量接口并不完全相同；插件分别适配通用
+`getEnvs/setEnvs` 接口和 GoLand 的 `getCustomEnvironment/setCustomEnvironment`
+接口。极少数自定义配置不提供环境变量时，插件会显示其真实类名，便于继续适配。
 
 断点在发送之前时，选中请求 JSON，右键执行
 **Render Selected Request JSON as cURL**。没有选区时会读取整个当前文档。
@@ -89,7 +94,7 @@ cd ide/jetbrains
 ```
 
 产物：
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.0.zip`。
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.1.zip`。
 
 使用本机 IDE 快速验证：
 
