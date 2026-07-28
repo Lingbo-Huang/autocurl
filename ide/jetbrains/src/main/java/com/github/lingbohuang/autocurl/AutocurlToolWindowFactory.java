@@ -136,6 +136,11 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
             }
             showDiagnostic(project, session, diagnostic);
         });
+        session.addRenderedCurlListener(rendered -> {
+            list.clearSelection();
+            curl.setText(rendered);
+            curl.setCaretPosition(0);
+        });
 
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         toolWindow.getContentManager().addContent(content);

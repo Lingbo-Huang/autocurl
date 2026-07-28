@@ -12,6 +12,7 @@ import com.intellij.openapi.ui.Messages;
 import org.jetbrains.annotations.NotNull;
 
 import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.DataFlavor;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
@@ -24,9 +25,7 @@ public final class RenderSelectedRequestAction extends AnAction {
     @Override
     public void update(@NotNull AnActionEvent event) {
         Project project = event.getProject();
-        event.getPresentation().setEnabled(
-                project != null && FileEditorManager.getInstance(project).getSelectedTextEditor() != null
-        );
+        event.getPresentation().setEnabled(project != null);
     }
 
     @Override
@@ -38,17 +37,18 @@ public final class RenderSelectedRequestAction extends AnAction {
 
     static void renderEditorRequest(Project project) {
         Editor editor = FileEditorManager.getInstance(project).getSelectedTextEditor();
-        if (editor == null) {
-            Messages.showInfoMessage(project, "Open a request JSON document first.", "Autocurl");
-            return;
+        String requestJson = editor == null ? null : editor.getSelectionModel().getSelectedText();
+        if ((requestJson == null || requestJson.isBlank()) && editor != null) {
+            String document = editor.getDocument().getText().trim();
+            if (looksLikeJsonObject(document)) requestJson = document;
         }
-        String requestJson = editor.getSelectionModel().getSelectedText();
         if (requestJson == null || requestJson.isBlank()) {
-            requestJson = editor.getDocument().getText();
+            String clipboard = CopyPasteManager.getInstance().getContents(DataFlavor.stringFlavor);
+            if (looksLikeJsonObject(clipboard)) requestJson = clipboard;
         }
-        if (requestJson.isBlank()) {
-            Messages.showInfoMessage(project, "Select request JSON or open it in the editor first.", "Autocurl");
-            return;
+        if (requestJson == null || requestJson.isBlank()) {
+            requestJson = requestJsonDialog(project);
+            if (requestJson == null || requestJson.isBlank()) return;
         }
         String finalRequestJson = requestJson;
         ApplicationManager.getApplication().executeOnPooledThread(() -> {
@@ -80,9 +80,10 @@ public final class RenderSelectedRequestAction extends AnAction {
                 }
                 ApplicationManager.getApplication().invokeLater(() -> {
                     CopyPasteManager.getInstance().setContents(new StringSelection(result.curl()));
+                    CaptureSession.getInstance(project).showRenderedCurl(result.curl());
                     Messages.showInfoMessage(
                             project,
-                            "The generated cURL was copied to the clipboard.",
+                            "The generated cURL is shown in the Autocurl window and copied to the clipboard.",
                             "Autocurl"
                     );
                 });
@@ -92,6 +93,95 @@ public final class RenderSelectedRequestAction extends AnAction {
                 );
             }
         });
+    }
+
+    private static String requestJsonDialog(Project project) {
+        String[] choices = {
+                "Generic request",
+                "Go http.Request",
+                "Java HttpRequest",
+                "Python PreparedRequest",
+                "Node.js Axios",
+                "Node.js fetch"
+        };
+        int choice = Messages.showChooseDialog(
+                project,
+                "Choose the closest request shape. Replace the example values with data visible in the debugger.",
+                "Generate cURL from Request JSON",
+                Messages.getQuestionIcon(),
+                choices,
+                choices[0]
+        );
+        if (choice < 0) return null;
+        return Messages.showMultilineInputDialog(
+                project,
+                "Paste or edit the complete method, URL, headers, and body. This does not send a request.",
+                "Generate cURL from Request JSON",
+                template(choice),
+                Messages.getQuestionIcon(),
+                null
+        );
+    }
+
+    private static String template(int choice) {
+        return switch (choice) {
+            case 1 -> """
+                    {
+                      "Method": "POST",
+                      "URL": {"Scheme": "https", "Host": "api.example.com", "Path": "/orders"},
+                      "Header": {"Content-Type": ["application/json"]},
+                      "Body": {"order_id": "demo-42"}
+                    }
+                    """;
+            case 2 -> """
+                    {
+                      "method": "POST",
+                      "uri": "https://api.example.com/orders",
+                      "headers": {"map": {"Content-Type": ["application/json"]}},
+                      "body": {"order_id": "demo-42"}
+                    }
+                    """;
+            case 3 -> """
+                    {
+                      "method": "POST",
+                      "url": "https://api.example.com/orders",
+                      "headers": {"Content-Type": "application/json"},
+                      "body": {"order_id": "demo-42"}
+                    }
+                    """;
+            case 4 -> """
+                    {
+                      "method": "post",
+                      "baseURL": "https://api.example.com",
+                      "url": "/orders",
+                      "headers": {"Content-Type": "application/json"},
+                      "data": {"order_id": "demo-42"}
+                    }
+                    """;
+            case 5 -> """
+                    {
+                      "url": "https://api.example.com/orders",
+                      "options": {
+                        "method": "POST",
+                        "headers": {"Content-Type": "application/json"},
+                        "body": "{\\"order_id\\":\\"demo-42\\"}"
+                      }
+                    }
+                    """;
+            default -> """
+                    {
+                      "method": "POST",
+                      "url": "https://api.example.com/orders",
+                      "protocol": "HTTP/2",
+                      "headers": {"Content-Type": "application/json"},
+                      "body": {"order_id": "demo-42"}
+                    }
+                    """;
+        };
+    }
+
+    private static boolean looksLikeJsonObject(String value) {
+        return value != null && value.trim().startsWith("{");
     }
 
     private static String rootMessage(Throwable error) {

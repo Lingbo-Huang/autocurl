@@ -113,7 +113,19 @@ export function activate(context: vscode.ExtensionContext): void {
           requestJSON = (await vscode.env.clipboard.readText()).trim();
         }
         if (!requestJSON) {
-          throw new Error("Select a request JSON object or copy one to the clipboard first.");
+          const template = await chooseRequestTemplate();
+          if (!template) {
+            return;
+          }
+          const document = await vscode.workspace.openTextDocument({
+            language: "json",
+            content: `${template}\n`,
+          });
+          await vscode.window.showTextDocument(document, { preview: false });
+          void vscode.window.showInformationMessage(
+            "Edit the request values, then run “Autocurl: Generate cURL from Request JSON” again.",
+          );
+          return;
         }
         const executable = await binary.resolve();
         const stdout = await renderRequest(executable, requestJSON);
@@ -127,7 +139,7 @@ export function activate(context: vscode.ExtensionContext): void {
           content: `${result.curl}\n`,
         });
         await vscode.window.showTextDocument(document, { preview: true });
-        void vscode.window.showInformationMessage("Rendered cURL copied to clipboard.");
+        void vscode.window.showInformationMessage("Generated cURL copied to clipboard.");
       }, output);
     }),
     vscode.commands.registerCommand("autocurl.renderSelection", async () => {
@@ -183,6 +195,80 @@ export function activate(context: vscode.ExtensionContext): void {
       void handleDiagnostic(diagnostic, session, output, lastLaunch);
     }),
   );
+}
+
+async function chooseRequestTemplate(): Promise<string | undefined> {
+  const templates: Array<{ label: string; description: string; value: string }> = [
+    {
+      label: "Generic request",
+      description: "Canonical method, URL, headers, body",
+      value: `{
+  "method": "POST",
+  "url": "https://api.example.com/orders",
+  "protocol": "HTTP/2",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"order_id": "demo-42"}
+}`,
+    },
+    {
+      label: "Go http.Request",
+      description: "Exported Go request fields",
+      value: `{
+  "Method": "POST",
+  "URL": {"Scheme": "https", "Host": "api.example.com", "Path": "/orders"},
+  "Header": {"Content-Type": ["application/json"]},
+  "Body": {"order_id": "demo-42"}
+}`,
+    },
+    {
+      label: "Java HttpRequest",
+      description: "URI and HttpHeaders map",
+      value: `{
+  "method": "POST",
+  "uri": "https://api.example.com/orders",
+  "headers": {"map": {"Content-Type": ["application/json"]}},
+  "body": {"order_id": "demo-42"}
+}`,
+    },
+    {
+      label: "Python PreparedRequest",
+      description: "requests-style request object",
+      value: `{
+  "method": "POST",
+  "url": "https://api.example.com/orders",
+  "headers": {"Content-Type": "application/json"},
+  "body": {"order_id": "demo-42"}
+}`,
+    },
+    {
+      label: "Node.js Axios",
+      description: "baseURL, url, headers, data",
+      value: `{
+  "method": "post",
+  "baseURL": "https://api.example.com",
+  "url": "/orders",
+  "headers": {"Content-Type": "application/json"},
+  "data": {"order_id": "demo-42"}
+}`,
+    },
+    {
+      label: "Node.js fetch",
+      description: "URL and fetch options",
+      value: `{
+  "url": "https://api.example.com/orders",
+  "options": {
+    "method": "POST",
+    "headers": {"Content-Type": "application/json"},
+    "body": "{\\"order_id\\":\\"demo-42\\"}"
+  }
+}`,
+    },
+  ];
+  const selected = await vscode.window.showQuickPick(templates, {
+    title: "Generate cURL from Request JSON",
+    placeHolder: "Choose a debugger request shape",
+  });
+  return selected?.value;
 }
 
 async function handleDiagnostic(

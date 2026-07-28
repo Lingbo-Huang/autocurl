@@ -94,6 +94,7 @@ public final class CaptureSession implements Disposable {
     private final List<RequestEvent> requests = new CopyOnWriteArrayList<>();
     private final List<Consumer<RequestEvent>> requestListeners = new CopyOnWriteArrayList<>();
     private final List<Consumer<DiagnosticEvent>> diagnosticListeners = new CopyOnWriteArrayList<>();
+    private final List<Consumer<String>> renderedCurlListeners = new CopyOnWriteArrayList<>();
     private final List<Runnable> stateListeners = new CopyOnWriteArrayList<>();
     private final Set<RunProfile> expectedProfiles =
             Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -422,6 +423,16 @@ public final class CaptureSession implements Disposable {
 
     public void addDiagnosticListener(Consumer<DiagnosticEvent> listener) {
         diagnosticListeners.add(listener);
+    }
+
+    public void addRenderedCurlListener(Consumer<String> listener) {
+        renderedCurlListeners.add(listener);
+    }
+
+    public void showRenderedCurl(String curl) {
+        ApplicationManager.getApplication().invokeLater(
+                () -> renderedCurlListeners.forEach(listener -> listener.accept(curl))
+        );
     }
 
     public void addStateListener(Runnable listener) {
