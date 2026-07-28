@@ -22,12 +22,19 @@ public final class AutocurlSettings implements PersistentStateComponent<Autocurl
         public boolean showSecrets = false;
         public List<String> replayHeaders = new ArrayList<>();
         public List<String> liveHeaders = new ArrayList<>();
+        public boolean quickStartShown = false;
     }
 
     private StateData state = new StateData();
 
     public static AutocurlSettings getInstance() {
         return ApplicationManager.getApplication().getService(AutocurlSettings.class);
+    }
+
+    public synchronized boolean markQuickStartShown() {
+        if (state.quickStartShown) return false;
+        state.quickStartShown = true;
+        return true;
     }
 
     @Override

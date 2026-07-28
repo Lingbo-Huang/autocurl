@@ -15,6 +15,11 @@
                 id="com.github.lingbohuang.autocurl.settings"
                 displayName="Autocurl"
                 instance="com.github.lingbohuang.autocurl.AutocurlConfigurable"/>
+        <notificationGroup
+                id="Autocurl onboarding"
+                displayType="BALLOON"/>
+        <postStartupActivity
+                implementation="com.github.lingbohuang.autocurl.AutocurlStartupActivity"/>
     </extensions>
 
     <actions>
@@ -38,6 +43,13 @@
                 text="Render Selected Request JSON as cURL"
                 description="Generate and copy a cURL from request JSON selected in the editor">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action
+                id="Autocurl.ShowQuickStart"
+                class="com.github.lingbohuang.autocurl.ShowQuickStartAction"
+                text="Autocurl Quick Start / 快速上手"
+                description="Show the Autocurl quick-start guide">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
