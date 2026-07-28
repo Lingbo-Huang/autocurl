@@ -268,11 +268,27 @@ export class CaptureSession implements vscode.Disposable {
     const merged = { ...(existing ?? {}) };
     const append = new Set(ready.append_environment ?? []);
     for (const [name, value] of Object.entries(ready.environment)) {
+      if (isBypassVariable(name)) {
+        continue;
+      }
       if (append.has(name) && merged[name]?.trim()) {
         merged[name] = `${merged[name]} ${value}`.trim();
       } else {
         merged[name] = value;
       }
+    }
+    if (Object.keys(ready.environment).some(isBypassVariable)) {
+      const targets = new Set<string>();
+      for (const name of ["NO_PROXY", "no_proxy", "no_grpc_proxy"]) {
+        addBypassValues(targets, existing?.[name]);
+      }
+      for (const name of ["NO_PROXY", "no_proxy", "no_grpc_proxy"]) {
+        addBypassValues(targets, ready.environment[name]);
+      }
+      const value = [...targets].join(",");
+      merged.NO_PROXY = value;
+      merged.no_proxy = value;
+      merged.no_grpc_proxy = value;
     }
     merged.AUTOCURL_SESSION_ID = this.sessionToken;
     return merged;
@@ -444,6 +460,19 @@ export class CaptureSession implements vscode.Disposable {
     this.changed.dispose();
     this.diagnostics.dispose();
     this.debugDisposables.forEach((disposable) => disposable.dispose());
+  }
+}
+
+function isBypassVariable(name: string): boolean {
+  return name === "NO_PROXY" || name === "no_proxy" || name === "no_grpc_proxy";
+}
+
+function addBypassValues(targets: Set<string>, value: string | undefined): void {
+  for (const target of value?.split(",") ?? []) {
+    const normalized = target.trim();
+    if (normalized) {
+      targets.add(normalized);
+    }
   }
 }
 

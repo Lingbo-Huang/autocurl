@@ -359,21 +359,14 @@ public final class CaptureSession implements Disposable {
     }
 
     public Map<String, String> mergeEnvironment(Map<String, String> existing, ReadyEvent event) {
-        Map<String, String> merged = new LinkedHashMap<>(
-                existing == null ? Map.of() : existing
-        );
         Set<String> append = Set.copyOf(
                 event.append_environment() == null ? List.of() : event.append_environment()
         );
-        event.environment().forEach((name, value) -> {
-            String previous = merged.get(name);
-            if (append.contains(name) && previous != null && !previous.isBlank()) {
-                merged.put(name, (previous + " " + value).trim());
-            } else {
-                merged.put(name, value);
-            }
-        });
-        return merged;
+        return RunConfigurationEnvironment.mergeCaptureEnvironment(
+                existing,
+                event.environment(),
+                append
+        );
     }
 
     public List<RequestEvent> requests() {

@@ -33,6 +33,7 @@
     "onCommand:autocurl.resume",
     "onCommand:autocurl.copyLast",
     "onCommand:autocurl.generateFromRequestJson",
+    "onCommand:autocurl.runDiagnostics",
     "onDebug"
   ],
   "contributes": {
@@ -76,6 +77,10 @@
       {
         "command": "autocurl.openQuickStart",
         "title": "Autocurl: Quick Start / 使用说明"
+      },
+      {
+        "command": "autocurl.runDiagnostics",
+        "title": "Autocurl: Run Environment Check"
       },
       {
         "command": "autocurl.downloadBinary",
@@ -202,7 +207,7 @@
     "viewsWelcome": [
       {
         "view": "autocurl.requests",
-        "contents": "Capture outbound requests from your next debug launch.\n[Quick Start / 使用说明](command:autocurl.openQuickStart)\n[Start Capture](command:autocurl.start)\n[Open Settings](command:workbench.action.openSettings?%5B%22%40ext%3Alingbo-huang.autocurl%22%5D)"
+        "contents": "Capture outbound requests from your next debug launch.\n[Quick Start / 使用说明](command:autocurl.openQuickStart)\n[Start Capture](command:autocurl.start)\n[Run Environment Check](command:autocurl.runDiagnostics)\n[Open Settings](command:workbench.action.openSettings?%5B%22%40ext%3Alingbo-huang.autocurl%22%5D)"
       }
     ],
     "menus": {

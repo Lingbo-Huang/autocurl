@@ -157,6 +157,18 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showInformationMessage("Autocurl engine is installed and verified.");
       }, output);
     }),
+    vscode.commands.registerCommand("autocurl.runDiagnostics", async () => {
+      await runWithErrors(async () => {
+        const executable = await binary.resolve();
+        const report = await runDoctor(executable);
+        output.appendLine(report);
+        const document = await vscode.workspace.openTextDocument({
+          language: "plaintext",
+          content: `${report}\n`,
+        });
+        await vscode.window.showTextDocument(document, { preview: true });
+      }, output);
+    }),
     vscode.debug.registerDebugConfigurationProvider("*", {
       async resolveDebugConfiguration(
         folder: vscode.WorkspaceFolder | undefined,
@@ -360,6 +372,38 @@ function renderRequest(executable: string, requestJSON: string): Promise<string>
       }
     });
     child.stdin.end(requestJSON);
+  });
+}
+
+function runDoctor(executable: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, ["doctor"], {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    const timeout = setTimeout(() => {
+      child.kill();
+      reject(new Error("Environment check timed out."));
+    }, 15000);
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timeout);
+      if (code === 0) {
+        resolve(Buffer.concat(stdout).toString("utf8").trim());
+      } else {
+        reject(new Error(
+          Buffer.concat(stderr).toString("utf8").trim() ||
+          `Autocurl doctor exited with code ${code}.`,
+        ));
+      }
+    });
   });
 }
 

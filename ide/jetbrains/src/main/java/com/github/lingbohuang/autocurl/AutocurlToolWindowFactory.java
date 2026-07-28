@@ -9,6 +9,7 @@ import com.intellij.notification.NotificationType;
 import com.intellij.openapi.options.ShowSettingsUtil;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.ide.CopyPasteManager;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.wm.ToolWindow;
@@ -29,6 +30,9 @@ import javax.swing.JPanel;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.datatransfer.StringSelection;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
 
 public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbAware {
     @Override
@@ -78,6 +82,8 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
         render.addActionListener(event -> RenderSelectedRequestAction.renderEditorRequest(project));
         JButton help = new JButton("Quick Start / 使用说明");
         help.addActionListener(event -> AutocurlHelp.show(project));
+        JButton doctor = new JButton("Environment Check");
+        doctor.addActionListener(event -> runDiagnostics(project, session));
         JButton clear = new JButton("Clear");
         clear.addActionListener(event -> {
             session.clear();
@@ -94,6 +100,7 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
         toolbar.add(copy);
         toolbar.add(render);
         toolbar.add(help);
+        toolbar.add(doctor);
         toolbar.add(clear);
         toolbar.add(status);
 
@@ -144,6 +151,34 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
 
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         toolWindow.getContentManager().addContent(content);
+    }
+
+    private static void runDiagnostics(Project project, CaptureSession session) {
+        ApplicationManager.getApplication().executeOnPooledThread(() -> {
+            try {
+                Process process = new ProcessBuilder(EngineManager.resolve(), "doctor").start();
+                byte[] stdout = process.getInputStream().readNBytes(1024 * 1024);
+                byte[] stderr = process.getErrorStream().readNBytes(1024 * 1024);
+                if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                    process.destroyForcibly();
+                    throw new IOException("Environment check timed out.");
+                }
+                String result = new String(stdout, StandardCharsets.UTF_8).trim();
+                if (process.exitValue() != 0) {
+                    String error = new String(stderr, StandardCharsets.UTF_8).trim();
+                    throw new IOException(error.isBlank() ? "Environment check failed." : error);
+                }
+                session.showRenderedCurl(result);
+            } catch (Exception error) {
+                ApplicationManager.getApplication().invokeLater(() ->
+                        Messages.showErrorDialog(
+                                project,
+                                error.getMessage() == null ? error.toString() : error.getMessage(),
+                                "Autocurl Environment Check Failed"
+                        )
+                );
+            }
+        });
     }
 
     private static String formatDiagnostic(CaptureSession.DiagnosticEvent diagnostic) {

@@ -17,7 +17,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,6 +72,56 @@ final class RunConfigurationEnvironment {
         return environmentInjected
                 && alignGoOverlayWithSdk(configuration, environment.get("GOFLAGS"))
                 && injectGoBuildOverlay(configuration, environment.get("GOFLAGS"));
+    }
+
+    static Map<String, String> mergeCaptureEnvironment(
+            Map<String, String> existing,
+            Map<String, String> overrides,
+            Set<String> appendNames
+    ) {
+        Map<String, String> merged = new LinkedHashMap<>(
+                existing == null ? Map.of() : existing
+        );
+        Set<String> append = appendNames == null ? Set.of() : appendNames;
+        overrides.forEach((name, value) -> {
+            if (isBypassVariable(name)) return;
+            String previous = merged.get(name);
+            if (append.contains(name) && previous != null && !previous.isBlank()) {
+                merged.put(name, (previous + " " + value).trim());
+            } else {
+                merged.put(name, value);
+            }
+        });
+
+        boolean hasBypassOverride = overrides.keySet().stream()
+                .anyMatch(RunConfigurationEnvironment::isBypassVariable);
+        if (hasBypassOverride) {
+            LinkedHashSet<String> targets = new LinkedHashSet<>();
+            for (String name : List.of("NO_PROXY", "no_proxy", "no_grpc_proxy")) {
+                addCommaSeparated(targets, existing == null ? null : existing.get(name));
+            }
+            for (String name : List.of("NO_PROXY", "no_proxy", "no_grpc_proxy")) {
+                addCommaSeparated(targets, overrides.get(name));
+            }
+            String bypass = String.join(",", targets);
+            merged.put("NO_PROXY", bypass);
+            merged.put("no_proxy", bypass);
+            merged.put("no_grpc_proxy", bypass);
+        }
+        return merged;
+    }
+
+    private static boolean isBypassVariable(String name) {
+        return "NO_PROXY".equals(name) || "no_proxy".equals(name) ||
+                "no_grpc_proxy".equals(name);
+    }
+
+    private static void addCommaSeparated(Set<String> destination, String value) {
+        if (value == null || value.isBlank()) return;
+        for (String target : value.split(",")) {
+            String normalized = target.trim();
+            if (!normalized.isEmpty()) destination.add(normalized);
+        }
     }
 
     private static boolean alignGoOverlayWithSdk(Object configuration, String goFlags) {

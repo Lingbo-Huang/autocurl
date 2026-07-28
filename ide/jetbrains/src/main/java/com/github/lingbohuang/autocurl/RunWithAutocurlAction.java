@@ -46,9 +46,14 @@ abstract class RunWithAutocurlAction extends AnAction {
         if (!RunConfigurationEnvironment.supports(configuration)) {
             Messages.showWarningDialog(
                     project,
-                    "Autocurl cannot inject environment variables into this Run Configuration type:\n"
+                    "This Run Configuration type does not expose environment variables:\n"
                             + configuration.getClass().getName()
-                            + "\n\nPlease report this class name at github.com/Lingbo-Huang/autocurl/issues.",
+                            + "\n\nSupported standard configurations include Java, Go, Python, Node.js, "
+                            + "Gradle, Maven, and most shell configurations."
+                            + "\n\nFallbacks:"
+                            + "\n1. Create a standard language Run/Debug configuration;"
+                            + "\n2. Run `autocurl run --all -- <command>` and attach the debugger;"
+                            + "\n3. Report the class name above so an adapter can be added.",
                     "Unsupported Run Configuration"
             );
             return;

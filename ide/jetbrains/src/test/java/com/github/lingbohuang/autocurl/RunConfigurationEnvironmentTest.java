@@ -90,6 +90,29 @@ class RunConfigurationEnvironmentTest {
     }
 
     @Test
+    void captureEnvironmentPreservesAllExistingBypassVariables() {
+        Map<String, String> merged = RunConfigurationEnvironment.mergeCaptureEnvironment(
+                Map.of(
+                        "NO_PROXY", "localhost,127.0.0.1",
+                        "no_proxy", ".internal.example"
+                ),
+                Map.of(
+                        "NO_PROXY", "10.61.98.0/24",
+                        "no_proxy", "10.61.98.0/24",
+                        "no_grpc_proxy", "10.61.98.0/24",
+                        "HTTP_PROXY", "http://127.0.0.1:1234"
+                ),
+                java.util.Set.of()
+        );
+
+        String bypass = "localhost,127.0.0.1,.internal.example,10.61.98.0/24";
+        assertEquals(bypass, merged.get("NO_PROXY"));
+        assertEquals(bypass, merged.get("no_proxy"));
+        assertEquals(bypass, merged.get("no_grpc_proxy"));
+        assertEquals("http://127.0.0.1:1234", merged.get("HTTP_PROXY"));
+    }
+
+    @Test
     void addsTheConfiguredGoSdkAliasToTheOverlay(@TempDir Path tempDirectory) throws Exception {
         Path discoveredGoRoot = tempDirectory.resolve("Cellar/go/1.24.3/libexec");
         Path configuredGoRoot = tempDirectory.resolve("opt/go/libexec");
