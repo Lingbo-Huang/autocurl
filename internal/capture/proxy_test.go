@@ -661,6 +661,59 @@ func TestProxyMarksTruncatedRequestBody(t *testing.T) {
 	}
 }
 
+func TestProxyPauseKeepsForwardingWithoutRecording(t *testing.T) {
+	upstreamCalls := make(chan string, 2)
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		upstreamCalls <- request.URL.Path
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	authority, _ := NewAuthority()
+	events := make(chan Event, 2)
+	proxy, _ := NewProxy(Options{
+		Authority: authority,
+		OnEvent:   func(event Event) { events <- event },
+	})
+	address, _ := proxy.Start()
+	defer proxy.Close()
+
+	proxy.SetRecording(false)
+	client := proxyClient(t, address, nil)
+	response, err := client.Get(upstream.URL + "/paused")
+	if err != nil {
+		t.Fatalf("paused proxy stopped forwarding: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("paused proxy status = %d, want %d", response.StatusCode, http.StatusNoContent)
+	}
+	select {
+	case path := <-upstreamCalls:
+		if path != "/paused" {
+			t.Fatalf("paused upstream path = %q", path)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("paused proxy did not forward the request")
+	}
+	select {
+	case event := <-events:
+		t.Fatalf("paused proxy unexpectedly recorded an event: %#v", event)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	proxy.SetRecording(true)
+	response, err = client.Get(upstream.URL + "/resumed")
+	if err != nil {
+		t.Fatalf("resumed proxy request failed: %v", err)
+	}
+	response.Body.Close()
+	event := waitForRequestEvent(t, events)
+	if event.URL != upstream.URL+"/resumed" {
+		t.Fatalf("resumed event URL = %q", event.URL)
+	}
+}
+
 func proxyClientWithHTTP2(t *testing.T, address string, roots *x509.CertPool) *http.Client {
 	t.Helper()
 	proxyURL, err := url.Parse("http://" + address)

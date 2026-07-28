@@ -471,6 +471,29 @@ func (e *emitter) Emit(event capture.Event) {
 	}
 }
 
+func (e *emitter) EmitState(recording bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.options.JSON {
+		_ = e.encoder.Encode(struct {
+			SchemaVersion string `json:"schema_version"`
+			Type          string `json:"type"`
+			Recording     bool   `json:"recording"`
+		}{
+			SchemaVersion: "1",
+			Type:          "state",
+			Recording:     recording,
+		})
+		return
+	}
+	state := "paused"
+	if recording {
+		state = "recording"
+	}
+	fmt.Fprintf(e.options.Writer, "[autocurl] capture is now %s\n", state)
+}
+
 func (e *emitter) shouldEmit(event capture.Event) bool {
 	if e.options.Match != "" && !strings.Contains(event.URL, e.options.Match) {
 		return false

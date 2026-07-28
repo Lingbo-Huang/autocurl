@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -219,6 +220,63 @@ func TestProxyLifetimeEndsWhenStdinCloses(t *testing.T) {
 	}
 	if ready.Type != "ready" || ready.ProxyURL == "" || len(ready.Environment) == 0 {
 		t.Fatalf("unexpected ready event: %#v", ready)
+	}
+}
+
+func TestProxyControlProtocolPausesAndResumesRecording(t *testing.T) {
+	stdinReader, stdinWriter := io.Pipe()
+	stdoutReader, stdoutWriter := io.Pipe()
+	var stderr bytes.Buffer
+	done := make(chan int, 1)
+	go func() {
+		done <- proxyCommand(
+			[]string{"--json", "--lifetime-stdin"},
+			false,
+			stdinReader,
+			stdoutWriter,
+			&stderr,
+		)
+		_ = stdoutWriter.Close()
+	}()
+
+	decoder := json.NewDecoder(stdoutReader)
+	var ready proxyReadyEvent
+	if err := decoder.Decode(&ready); err != nil {
+		t.Fatalf("decode ready event: %v; stderr: %s", err, stderr.String())
+	}
+
+	for _, test := range []struct {
+		command   string
+		recording bool
+	}{
+		{command: "pause", recording: false},
+		{command: "resume", recording: true},
+	} {
+		if _, err := fmt.Fprintf(stdinWriter, "{\"command\":%q}\n", test.command); err != nil {
+			t.Fatalf("write %s control: %v", test.command, err)
+		}
+		var state struct {
+			Type      string `json:"type"`
+			Recording bool   `json:"recording"`
+		}
+		if err := decoder.Decode(&state); err != nil {
+			t.Fatalf("decode %s state: %v; stderr: %s", test.command, err, stderr.String())
+		}
+		if state.Type != "state" || state.Recording != test.recording {
+			t.Fatalf("%s state = %#v", test.command, state)
+		}
+	}
+
+	if err := stdinWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case exitCode := <-done:
+		if exitCode != 0 {
+			t.Fatalf("exit code = %d; stderr: %s", exitCode, stderr.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("proxy did not stop after control stdin closed")
 	}
 }
 

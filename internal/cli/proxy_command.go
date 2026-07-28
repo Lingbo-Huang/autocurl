@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -23,6 +24,10 @@ type proxyReadyEvent struct {
 	Environment       map[string]string `json:"environment"`
 	AppendEnvironment []string          `json:"append_environment,omitempty"`
 	Notes             []string          `json:"notes,omitempty"`
+}
+
+type proxyControl struct {
+	Command string `json:"command"`
 }
 
 func proxyCommand(
@@ -155,7 +160,33 @@ Examples:
 
 	stdinClosed := make(chan struct{})
 	go func() {
-		_, _ = io.Copy(io.Discard, stdin)
+		scanner := bufio.NewScanner(stdin)
+		for scanner.Scan() {
+			value := strings.TrimSpace(scanner.Text())
+			if value == "" {
+				continue
+			}
+			control := proxyControl{Command: value}
+			if strings.HasPrefix(value, "{") {
+				if err := json.Unmarshal([]byte(value), &control); err != nil {
+					fmt.Fprintf(stderr, "autocurl proxy: ignored invalid control message: %v\n", err)
+					continue
+				}
+			}
+			switch strings.ToLower(strings.TrimSpace(control.Command)) {
+			case "pause":
+				session.Proxy.SetRecording(false)
+				emitter.EmitState(false)
+			case "resume":
+				session.Proxy.SetRecording(true)
+				emitter.EmitState(true)
+			default:
+				fmt.Fprintf(stderr, "autocurl proxy: ignored unknown control command %q\n", control.Command)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			fmt.Fprintf(stderr, "autocurl proxy: read control input: %v\n", err)
+		}
 		close(stdinClosed)
 	}()
 	select {

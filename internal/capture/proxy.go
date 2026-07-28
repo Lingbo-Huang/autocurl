@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Lingbo-Huang/autocurl/internal/config"
@@ -53,6 +54,7 @@ type Proxy struct {
 	server       *http.Server
 	listener     net.Listener
 	closeOnce    sync.Once
+	recording    atomic.Bool
 }
 
 func NewProxy(options Options) (*Proxy, error) {
@@ -96,6 +98,7 @@ func NewProxy(options Options) (*Proxy, error) {
 		transport:    options.Transport,
 		h2cTransport: options.H2CTransport,
 	}
+	proxy.recording.Store(true)
 	proxy.server = &http.Server{
 		Handler:           proxy,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -112,7 +115,7 @@ func (p *Proxy) Start() (string, error) {
 	go func() {
 		err := p.server.Serve(listener)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			p.onEvent(Event{Timestamp: time.Now(), Error: fmt.Errorf("proxy server: %w", err)})
+			p.emit(Event{Timestamp: time.Now(), Error: fmt.Errorf("proxy server: %w", err)})
 		}
 	}()
 	return listener.Addr().String(), nil
@@ -134,6 +137,22 @@ func (p *Proxy) Close() error {
 	return closeErr
 }
 
+// SetRecording controls event retention without changing proxy forwarding.
+// Operational errors without request data are still emitted while paused.
+func (p *Proxy) SetRecording(recording bool) {
+	p.recording.Store(recording)
+}
+
+func (p *Proxy) IsRecording() bool {
+	return p.recording.Load()
+}
+
+func (p *Proxy) emit(event Event) {
+	if event.Method == "" && event.URL == "" || p.recording.Load() {
+		p.onEvent(event)
+	}
+}
+
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodConnect {
 		p.handleConnect(writer, request)
@@ -146,7 +165,7 @@ func (p *Proxy) handleHTTP(writer http.ResponseWriter, request *http.Request, sc
 	response, event, capturedBody := p.roundTrip(request, scheme)
 	if response == nil {
 		finalizeEvent(&event, capturedBody, nil)
-		p.onEvent(event)
+		p.emit(event)
 		http.Error(writer, event.Error.Error(), http.StatusBadGateway)
 		return
 	}
@@ -176,7 +195,7 @@ func (p *Proxy) handleHTTP(writer http.ResponseWriter, request *http.Request, sc
 	}
 	copyHeaders(writer.Header(), response.Trailer)
 	finalizeEvent(&event, capturedBody, response)
-	p.onEvent(event)
+	p.emit(event)
 }
 
 func (p *Proxy) handleHTTP1Switch(
@@ -190,7 +209,7 @@ func (p *Proxy) handleHTTP1Switch(
 		response.Body.Close()
 		event.Error = fmt.Errorf("upstream switched protocols without a writable connection")
 		finalizeEvent(&event, capturedBody, response)
-		p.onEvent(event)
+		p.emit(event)
 		http.Error(writer, event.Error.Error(), http.StatusBadGateway)
 		return
 	}
@@ -200,7 +219,7 @@ func (p *Proxy) handleHTTP1Switch(
 		upstream.Close()
 		event.Error = fmt.Errorf("hijack upgraded client connection: %w", err)
 		finalizeEvent(&event, capturedBody, response)
-		p.onEvent(event)
+		p.emit(event)
 		return
 	}
 	defer connection.Close()
@@ -209,18 +228,18 @@ func (p *Proxy) handleHTTP1Switch(
 	if err := writeSwitchingProtocols(buffered, response); err != nil {
 		event.Error = fmt.Errorf("write protocol-switch response: %w", err)
 		finalizeEvent(&event, capturedBody, response)
-		p.onEvent(event)
+		p.emit(event)
 		return
 	}
 	if err := buffered.Flush(); err != nil {
 		event.Error = fmt.Errorf("flush protocol-switch response: %w", err)
 		finalizeEvent(&event, capturedBody, response)
-		p.onEvent(event)
+		p.emit(event)
 		return
 	}
 
 	finalizeEvent(&event, capturedBody, response)
-	p.onEvent(event)
+	p.emit(event)
 	relayDuplex(connection, buffered.Reader, upstream)
 }
 
@@ -253,7 +272,7 @@ func (p *Proxy) serveConnect(rawConnection net.Conn, host string) {
 	firstByte, err := reader.Peek(1)
 	if err != nil {
 		if !errors.Is(err, io.EOF) && !isClosedConnection(err) {
-			p.onEvent(Event{Timestamp: time.Now(), Error: fmt.Errorf("inspect CONNECT stream for %s: %w", host, err)})
+			p.emit(Event{Timestamp: time.Now(), Error: fmt.Errorf("inspect CONNECT stream for %s: %w", host, err)})
 		}
 		return
 	}
@@ -261,7 +280,7 @@ func (p *Proxy) serveConnect(rawConnection net.Conn, host string) {
 	if firstByte[0] == http2.ClientPreface[0] {
 		preface, err := reader.Peek(len(http2.ClientPreface))
 		if err != nil || !bytes.Equal(preface, []byte(http2.ClientPreface)) {
-			p.onEvent(Event{Timestamp: time.Now(), Error: fmt.Errorf("unsupported cleartext CONNECT protocol for %s", host)})
+			p.emit(Event{Timestamp: time.Now(), Error: fmt.Errorf("unsupported cleartext CONNECT protocol for %s", host)})
 			return
 		}
 		p.serveHTTP2(connection, host, "http")
@@ -273,7 +292,7 @@ func (p *Proxy) serveConnect(rawConnection net.Conn, host string) {
 func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
 	certificate, err := p.authority.Certificate(host)
 	if err != nil {
-		p.onEvent(Event{Timestamp: time.Now(), Error: err})
+		p.emit(Event{Timestamp: time.Now(), Error: err})
 		return
 	}
 	tlsConnection := tls.Server(rawConnection, &tls.Config{
@@ -282,7 +301,7 @@ func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
 		NextProtos:   []string{"h2", "http/1.1"},
 	})
 	if err := tlsConnection.Handshake(); err != nil {
-		p.onEvent(Event{Timestamp: time.Now(), Error: fmt.Errorf("TLS handshake for %s: %w", host, err)})
+		p.emit(Event{Timestamp: time.Now(), Error: fmt.Errorf("TLS handshake for %s: %w", host, err)})
 		return
 	}
 
@@ -296,7 +315,7 @@ func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
 		request, err := http.ReadRequest(reader)
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !isClosedConnection(err) {
-				p.onEvent(Event{Timestamp: time.Now(), Error: fmt.Errorf("read HTTPS request for %s: %w", host, err)})
+				p.emit(Event{Timestamp: time.Now(), Error: fmt.Errorf("read HTTPS request for %s: %w", host, err)})
 			}
 			return
 		}
@@ -326,18 +345,18 @@ func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
 				response.Body.Close()
 				event.Error = fmt.Errorf("upstream switched protocols without a writable connection")
 				finalizeEvent(&event, capturedBody, response)
-				p.onEvent(event)
+				p.emit(event)
 				return
 			}
 			if err := writeSwitchingProtocols(tlsConnection, response); err != nil {
 				upstream.Close()
 				event.Error = fmt.Errorf("write HTTPS protocol-switch response: %w", err)
 				finalizeEvent(&event, capturedBody, response)
-				p.onEvent(event)
+				p.emit(event)
 				return
 			}
 			finalizeEvent(&event, capturedBody, response)
-			p.onEvent(event)
+			p.emit(event)
 			relayDuplex(tlsConnection, reader, upstream)
 			upstream.Close()
 			return
@@ -358,7 +377,7 @@ func (p *Proxy) serveTLS(rawConnection net.Conn, host string) {
 			event.Error = fmt.Errorf("write HTTPS response: %w", writeErr)
 		}
 		finalizeEvent(&event, capturedBody, response)
-		p.onEvent(event)
+		p.emit(event)
 		if writeErr != nil || request.Close || response.Close {
 			return
 		}
