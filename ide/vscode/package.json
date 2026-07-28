@@ -2,12 +2,22 @@
   "name": "autocurl",
   "displayName": "Autocurl",
   "description": "Capture outbound requests from IDE debug sessions and copy complete replayable cURLs.",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "publisher": "lingbo-huang",
   "license": "MIT",
+  "pricing": "Free",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#24243A",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/Lingbo-Huang/autocurl.git"
+  },
+  "homepage": "https://github.com/Lingbo-Huang/autocurl#readme",
+  "bugs": {
+    "url": "https://github.com/Lingbo-Huang/autocurl/issues"
   },
   "engines": {
     "vscode": "^1.85.0"

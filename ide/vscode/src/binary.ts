@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 const repository = "Lingbo-Huang/autocurl";
 // Keep this aligned with the extension version. Older engines may be protocol
 // compatible while still missing runtime fixes such as platform Go CA trust.
-const minimumVersion = "0.2.4";
+const minimumVersion = "0.3.0";
 
 interface ReleaseAsset {
   name: string;
@@ -46,7 +46,8 @@ export class BinaryManager {
     }
     if (!configuration.get<boolean>("autoDownload", true) && !forceDownload) {
       throw new Error(
-        "No compatible autocurl engine was found. Set autocurl.binaryPath or enable autocurl.autoDownload.",
+        "No compatible autocurl engine was found. The extension is the UI and needs a matching " +
+          "autocurl engine. Enable autocurl.autoDownload or set autocurl.binaryPath.",
       );
     }
     return vscode.window.withProgress(
@@ -99,7 +100,10 @@ export class BinaryManager {
     const version = release.tag_name.replace(/^v/, "");
     if (compareVersions(version, minimumVersion) < 0) {
       throw new Error(
-        `Latest GitHub release is ${release.tag_name}, but this extension requires v${minimumVersion} or newer.`,
+        `Latest GitHub release is ${release.tag_name}, but this extension requires ` +
+          `v${minimumVersion} or newer. If you are testing a VSIX before its GitHub ` +
+          "Release exists, build the matching CLI and set autocurl.binaryPath. " +
+          "Normal Release users do not need this step.",
       );
     }
 

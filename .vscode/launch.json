@@ -1,0 +1,45 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Autocurl demo: Go",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/examples/go-http-client",
+      "env": {
+        "AUTOCURL_DEMO_URL": "https://example.com/"
+      }
+    },
+    {
+      "name": "Autocurl demo: Python",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/examples/python-client/client.py",
+      "console": "integratedTerminal",
+      "env": {
+        "AUTOCURL_DEMO_URL": "https://example.com/"
+      }
+    },
+    {
+      "name": "Autocurl demo: Java",
+      "type": "java",
+      "request": "launch",
+      "mainClass": "AutocurlExample",
+      "cwd": "${workspaceFolder}/examples/java-client",
+      "env": {
+        "AUTOCURL_DEMO_URL": "https://example.com/"
+      }
+    },
+    {
+      "name": "Autocurl demo: Node.js",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/examples/node-client/client.js",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "AUTOCURL_DEMO_URL": "https://example.com/"
+      }
+    }
+  ]
+}

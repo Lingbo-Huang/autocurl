@@ -28,7 +28,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing Git release tag to publish, for example v0.2.3
+        description: Existing Git release tag to publish, for example v0.3.0
         required: true
         type: string
       target:

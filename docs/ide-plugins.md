@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.2.4.vsix` with
+Install `autocurl-0.3.0.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -38,9 +38,12 @@ Default workflow:
 Useful commands:
 
 - **Autocurl: Start Capture**
-- **Autocurl: Stop Capture**
+- **Autocurl: Pause Recording / Resume Recording**
+- **Autocurl: Stop Session**
+- **Autocurl: Clear Requests**
 - **Autocurl: Copy Last cURL**
-- **Autocurl: Render Selected Request JSON**
+- **Autocurl: Generate cURL from Request JSON**
+- **Autocurl: Run Environment Check**
 - **Autocurl: Download/Update Engine**
 
 Important settings:
@@ -51,11 +54,14 @@ Important settings:
 | `autocurl.injectDebugEnvironment` | `true` | Merge process-scoped proxy/trust variables |
 | `autocurl.binaryPath` | empty | Use a specific engine instead of managed/PATH lookup |
 | `autocurl.autoDownload` | `true` | Download and SHA-256 verify the matching release |
+| `autocurl.captureMode` | `safe` | Safe prioritizes compatibility; Strict forces interception |
 | `autocurl.match` | empty | Show only URLs containing this value |
 | `autocurl.method` | empty | Show only one HTTP method |
 | `autocurl.replayHeaders` | `[]` | Add headers only to generated cURLs |
 | `autocurl.liveHeaders` | `[]` | Inject headers into real traffic; use carefully |
 | `autocurl.bypassTargets` | `[]` | Keep mTLS/direct infrastructure targets outside capture |
+| `autocurl.expectedListenPorts` | `[]` | Diagnose service startup by checking localhost ports |
+| `autocurl.startupDiagnosticSeconds` | `15` | Wait before port/proxy-traffic diagnostics |
 | `autocurl.showSecrets` | `false` | Disable safe redaction |
 
 The environment provider applies to IDE debug launches, including Run Without
@@ -70,7 +76,7 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.2.4.vsix`.
+Output: `ide/vscode/autocurl-0.3.0.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
@@ -86,7 +92,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.2.4.zip` with
+Install `autocurl-jetbrains-0.3.0.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -133,9 +139,12 @@ Go through `GOROOT`, standard installation locations, and the user's login
 shell, requires the matching engine version, and passes the temporary overlay
 to GoLand's build parameters so it participates in `go build`.
 
-When a breakpoint is before send, select request JSON in an editor and use
-**Render Selected Request JSON as cURL**. The entire JSON document is used when
-there is no selection.
+When a breakpoint is before send, copy the request JSON from Variables/Watches
+and use **Generate cURL from Request JSON**. The plugin reads an editor
+selection, then a JSON document, then the clipboard. When all are empty it
+offers Go, Java, Python, Axios, and Fetch templates. Debugger values require
+Copy Value because there is no generic IntelliJ debugger-variable API shared by
+all language plugins.
 
 ### Package the JetBrains ZIP
 
@@ -147,7 +156,7 @@ cd ide/jetbrains
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.2.4.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.0.zip`.
 
 For a faster local API check against an installed product:
 
@@ -182,8 +191,10 @@ environment variables and their secrets are never serialized into the JSON
 protocol. `GOFLAGS` and `JAVA_TOOL_OPTIONS` are marked as append-only so an IDE
 preserves values already present in the Run/Debug Configuration.
 
-Stopping capture closes engine stdin. The engine then shuts down its proxy and
-deletes the ephemeral CA, Java truststore, and Go overlay.
+Pause Recording suppresses new rows while the proxy keeps forwarding. Stop
+Session terminates associated Run/Debug processes before it closes engine
+stdin and removes the ephemeral CA, Java truststore, and Go overlay. Clear only
+empties the list.
 
 ## Current integration boundary
 

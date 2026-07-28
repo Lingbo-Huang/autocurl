@@ -97,15 +97,15 @@ class RunConfigurationEnvironmentTest {
                         "no_proxy", ".internal.example"
                 ),
                 Map.of(
-                        "NO_PROXY", "10.61.98.0/24",
-                        "no_proxy", "10.61.98.0/24",
-                        "no_grpc_proxy", "10.61.98.0/24",
+                        "NO_PROXY", "198.51.100.0/24",
+                        "no_proxy", "198.51.100.0/24",
+                        "no_grpc_proxy", "198.51.100.0/24",
                         "HTTP_PROXY", "http://127.0.0.1:1234"
                 ),
                 java.util.Set.of()
         );
 
-        String bypass = "localhost,127.0.0.1,.internal.example,10.61.98.0/24";
+        String bypass = "localhost,127.0.0.1,.internal.example,198.51.100.0/24";
         assertEquals(bypass, merged.get("NO_PROXY"));
         assertEquals(bypass, merged.get("no_proxy"));
         assertEquals(bypass, merged.get("no_grpc_proxy"));

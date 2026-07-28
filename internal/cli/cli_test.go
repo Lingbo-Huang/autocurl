@@ -202,11 +202,11 @@ func TestMergeBypassTargetsPreservesExistingValues(t *testing.T) {
 		[]string{
 			"NO_PROXY=localhost,127.0.0.1",
 			"no_proxy=127.0.0.1,.internal.example",
-			"no_grpc_proxy=10.4.44.94",
+			"no_grpc_proxy=192.0.2.10",
 		},
-		[]string{"10.4.44.94", "10.61.98.0/24"},
+		[]string{"192.0.2.10", "198.51.100.0/24"},
 	)
-	want := "localhost,127.0.0.1,.internal.example,10.4.44.94,10.61.98.0/24"
+	want := "localhost,127.0.0.1,.internal.example,192.0.2.10,198.51.100.0/24"
 	if got != want {
 		t.Fatalf("merged bypass = %q, want %q", got, want)
 	}
@@ -234,10 +234,10 @@ func TestBuildChildEnvironmentAppliesBypassToHTTPAndGRPC(t *testing.T) {
 		"127.0.0.1:1234",
 		filepath.Join(t.TempDir(), "missing-ca.pem"),
 		t.TempDir(),
-		[]string{"10.4.44.94", "10.61.98.0/24"},
+		[]string{"192.0.2.10", "198.51.100.0/24"},
 	)
 	got := environmentMap(environment)
-	want := "localhost,10.4.44.94,10.61.98.0/24"
+	want := "localhost,192.0.2.10,198.51.100.0/24"
 	for _, name := range []string{"NO_PROXY", "no_proxy", "no_grpc_proxy"} {
 		if got[name] != want {
 			t.Fatalf("%s = %q, want %q", name, got[name], want)
@@ -246,16 +246,16 @@ func TestBuildChildEnvironmentAppliesBypassToHTTPAndGRPC(t *testing.T) {
 }
 
 func TestJavaNonProxyHostsUsesJavaSeparators(t *testing.T) {
-	got := javaNonProxyHosts("localhost,.internal.example,10.4.44.94,10.61.98.0/24")
-	want := "localhost|*.internal.example|10.4.44.94|10.61.98.*"
+	got := javaNonProxyHosts("localhost,.internal.example,192.0.2.10,198.51.100.0/24")
+	want := "localhost|*.internal.example|192.0.2.10|198.51.100.*"
 	if got != want {
 		t.Fatalf("Java non-proxy hosts = %q, want %q", got, want)
 	}
 }
 
 func TestJavaNonProxyHostsExpandsNonOctetIPv4CIDR(t *testing.T) {
-	got := javaNonProxyHosts("10.61.96.0/20")
-	for _, wanted := range []string{"10.61.96.*", "10.61.103.*", "10.61.111.*"} {
+	got := javaNonProxyHosts("198.51.96.0/20")
+	for _, wanted := range []string{"198.51.96.*", "198.51.103.*", "198.51.111.*"} {
 		if !strings.Contains(got, wanted) {
 			t.Fatalf("Java CIDR expansion %q does not contain %q", got, wanted)
 		}
@@ -269,7 +269,7 @@ func TestBypassTargetsRejectURLsAndExplainCIDRPortability(t *testing.T) {
 	if err := validateBypassTargets([]string{
 		"localhost",
 		".internal.example",
-		"10.61.98.0/24",
+		"198.51.100.0/24",
 		"[::1]",
 	}); err != nil {
 		t.Fatalf("valid bypass targets were rejected: %v", err)
@@ -277,7 +277,7 @@ func TestBypassTargetsRejectURLsAndExplainCIDRPortability(t *testing.T) {
 	if err := validateBypassTargets([]string{"https://api.example.com"}); err == nil {
 		t.Fatal("URL-shaped bypass target was accepted")
 	}
-	notes := bypassCompatibilityNotes("10.61.98.0/24,api.internal.example")
+	notes := bypassCompatibilityNotes("198.51.100.0/24,api.internal.example")
 	if len(notes) == 0 || !strings.Contains(notes[0], "Node.js") {
 		t.Fatalf("CIDR compatibility notes = %#v", notes)
 	}

@@ -25,7 +25,7 @@ public final class EngineManager {
     private static final String REPOSITORY = "Lingbo-Huang/autocurl";
     // Keep this aligned with the plugin version. A merely API-compatible older
     // engine can still miss runtime fixes such as platform-specific Go CA trust.
-    private static final String MINIMUM_VERSION = "0.2.4";
+    private static final String MINIMUM_VERSION = "0.3.0";
     private static final Gson GSON = new Gson();
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.ALWAYS)
@@ -51,7 +51,8 @@ public final class EngineManager {
             return "autocurl";
         }
         if (!settings.autoDownload) {
-            throw new IOException("No compatible autocurl engine found. Configure its path in Settings | Tools | Autocurl.");
+            throw new IOException("No compatible autocurl engine found. The IDE plugin is the UI and needs a matching "
+                    + "autocurl engine. Enable automatic download or configure Engine path in Settings | Tools | Autocurl.");
         }
         return downloadLatest().toString();
     }
@@ -88,7 +89,9 @@ public final class EngineManager {
         String version = release.tag_name().replaceFirst("^v", "");
         if (compareVersions(version, MINIMUM_VERSION) < 0) {
             throw new IOException("Latest GitHub release is " + release.tag_name()
-                    + ", but this plugin requires v" + MINIMUM_VERSION + " or newer.");
+                    + ", but this plugin requires v" + MINIMUM_VERSION + " or newer. "
+                    + "If you are testing an IDE package before its GitHub Release exists, build the matching CLI and "
+                    + "set Engine path in Settings | Tools | Autocurl. Normal Release users do not need this step.");
         }
         String platform = platformName();
         String architecture = architectureName();

@@ -88,6 +88,27 @@ autocurl render \
 Use `--show-secrets` only when exact local credentials are required. Default
 output is redacted.
 
+The IDE action **Generate cURL from Request JSON** reads, in order, an editor
+selection, the whole active JSON document, and clipboard text. If none exists,
+it offers templates for generic requests, Go `http.Request`, Java
+`HttpRequest`, Python `PreparedRequest`, Axios, and Fetch. Copy a value from
+Variables/Watches before invoking the action; generic direct debugger-variable
+access is not exposed consistently across language plugins.
+
+CLI templates are also available:
+
+```bash
+autocurl render --template go
+autocurl render --template java
+autocurl render --template python
+autocurl render --template node
+autocurl render --template fetch
+```
+
+Go's `Body` is commonly an opaque `io.ReadCloser`. If the exported object shows
+`Body: {}`, copy the buffered payload separately into a lowercase `body` field.
+The same principle applies to Java body publishers and streaming clients.
+
 ## Already-running processes
 
 `autocurl` cannot retroactively change the proxy or trust environment of a

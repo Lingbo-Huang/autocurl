@@ -4,7 +4,7 @@ set -euo pipefail
 
 tag="${1:-}"
 if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
-  echo "Expected a release tag such as v0.2.3, got: ${tag:-<empty>}" >&2
+  echo "Expected a release tag such as v0.3.0, got: ${tag:-<empty>}" >&2
   exit 1
 fi
 

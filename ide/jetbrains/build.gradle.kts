@@ -60,7 +60,7 @@ intellijPlatform {
             </ol>
             <p>
               <b>断点调试：</b>如果请求还没有真正发出，可在编辑器中选中请求 JSON，
-              然后点击 <b>Tools → Render Selected Request JSON as cURL</b>，
+              然后点击 <b>Tools → Generate cURL from Request JSON</b>，
               插件会直接生成并复制 cURL，不会发送网络请求。
             </p>
             <p>
@@ -97,11 +97,21 @@ intellijPlatform {
               <li>Select a captured request and click <b>Copy cURL</b>.</li>
             </ol>
             <p>
-              At a breakpoint before the request is sent, select request JSON in the editor
-              and choose <b>Tools → Render Selected Request JSON as cURL</b>.
+              At a breakpoint before the request is sent, copy request JSON from the
+              debugger and choose <b>Tools → Generate cURL from Request JSON</b>.
             </p>
         """.trimIndent()
         changeNotes = """
+            <h3>0.3.0</h3>
+            <ul>
+              <li>Added Safe and Strict Capture modes with actionable TLS and mTLS diagnostics.</li>
+              <li>Added Pause Recording without interrupting application traffic.</li>
+              <li>Made Stop Session terminate the associated Run/Debug process before closing the proxy.</li>
+              <li>Kept Clear independent from process and network lifecycle.</li>
+              <li>Added cURL generation from editor JSON, JSON files, clipboard, and common Go, Java, Python, Axios, and Fetch request shapes.</li>
+              <li>Added startup diagnostics for launch failures, early exits, missing listen ports, and HTTP clients that ignore proxy variables.</li>
+            </ul>
+
             <h3>0.2.4</h3>
             <ul>
               <li>Preserved existing NO_PROXY, no_proxy, and no_grpc_proxy values instead of clearing them.</li>

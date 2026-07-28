@@ -1,24 +1,37 @@
 # autocurl
 
 [![CI](https://github.com/Lingbo-Huang/autocurl/actions/workflows/ci.yml/badge.svg)](https://github.com/Lingbo-Huang/autocurl/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/Lingbo-Huang/autocurl)](https://github.com/Lingbo-Huang/autocurl/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [简体中文](README.zh-CN.md)
 
-Turn real outbound HTTP failures into safe, replayable cURL commands without
-changing application code.
+[Privacy](PRIVACY.md) · [Support](SUPPORT.md)
+
+Turn outbound requests from one IDE Run/Debug process into safe, replayable
+cURL commands—without changing application code or the operating-system proxy.
+
+## Three-step quick start
+
+1. Install the plugin package and select an existing Run/Debug configuration.
+2. JetBrains: choose **Run Selected with Autocurl**. VS Code/Cursor: debug as
+   usual.
+3. Trigger an outbound request, select it in **Autocurl Requests**, and click
+   **Copy cURL**.
+
+![Autocurl capturing a nested JSON POST in GoLand](docs/assets/autocurl-goland-post.jpg)
 
 ## IDE plugins: use it without typing commands
 
 The same Go capture engine now powers two thin IDE plugins:
 
-- **VS Code and Cursor:** install `autocurl-0.2.4.vsix` from
+- **VS Code and Cursor:** install `autocurl-0.3.0.vsix` from
   [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases). Start
   debugging normally. Capture starts automatically, and requests appear under
   **Explorer → Autocurl Requests**. Click a request to inspect it or click its
   action to copy the complete cURL.
 - **IntelliJ IDEA, GoLand, PyCharm, WebStorm, and other JetBrains IDEs:**
-  install `autocurl-jetbrains-0.2.4.zip` with
+  install `autocurl-jetbrains-0.3.0.zip` with
   **Settings → Plugins → ⚙ → Install Plugin from Disk**. Select an existing
   Run/Debug Configuration, then choose
   **Run → Run Selected with Autocurl** or
@@ -50,11 +63,24 @@ remain direct, add the corresponding host, IP, domain suffix, or CIDR under
 existing `NO_PROXY`, `no_proxy`, and `no_grpc_proxy` values. Bypassed traffic is
 not captured; all other eligible traffic still is.
 
+**Safe** mode is the default. It keeps detected mTLS and otherwise incompatible
+TLS destinations end-to-end so the application can keep working. **Strict
+Capture** forces interception and reports why incompatible traffic failed.
+
 If execution is paused before the network call, select a JSON object containing
 `method`, `url`, `headers`, and `body`, then run
-**Autocurl: Render Selected Request JSON** in VS Code/Cursor or
-**Render Selected Request JSON as cURL** in a JetBrains IDE. The cURL is copied
-without sending a request.
+**Autocurl: Generate cURL from Request JSON**. With no editor selection, the
+plugins fall back to a JSON document and then the clipboard. Go, Java, Python,
+Axios, and Fetch-shaped templates are included. The cURL is copied without
+sending a request.
+
+Session controls are deliberately separate:
+
+| Control | Application | Proxy traffic | Request list |
+| --- | --- | --- | --- |
+| Pause Recording | keeps running | keeps forwarding | stops adding rows |
+| Stop Session | is stopped first | proxy then closes | retained |
+| Clear | unchanged | unchanged | cleared only |
 
 See the [IDE plugin guide](docs/ide-plugins.md) for installation, settings,
 architecture, and packaging. Maintainers can use the
@@ -154,7 +180,7 @@ make build
 autocurl run --all --match '/orders' --copy -- python3 app.py
 autocurl run --all --match '/orders' --copy -- go run ./cmd/service
 autocurl run --all --match '/orders' --copy -- java -jar app.jar
-autocurl run --all --bypass 10.4.44.94 --bypass 10.61.98.0/24 -- go run ./cmd/service
+autocurl run --all --bypass 192.0.2.10 --bypass 198.51.100.0/24 -- go run ./cmd/service
 ```
 
 Dependency-free smoke examples:
@@ -163,6 +189,7 @@ Dependency-free smoke examples:
 autocurl run --all -- python3 examples/python-client/client.py
 autocurl run --all -- go run ./examples/go-client
 autocurl run --all -- java examples/java-client/AutocurlExample.java
+autocurl run --all -- node examples/node-client/client.js
 ```
 
 Add a gateway debug header only to the generated replay:
@@ -307,6 +334,7 @@ Important `run` options:
 | `--slow` | `2s` | Emit successful requests slower than this; `0` disables |
 | `--replay-header` | none | Add a header only to generated cURLs |
 | `--live-header` | none | Add a header to live traffic and generated cURLs |
+| `--mode` | `safe` | `safe` bypasses incompatible TLS; `strict` forces interception |
 | `--bypass` | existing `NO_PROXY` values | Exclude a host, IP, domain suffix, or CIDR; repeatable |
 | `--max-body` | `1048576` | Maximum request-body bytes retained |
 | `--show-secrets` | off | Print exact sensitive values; unsafe for sharing |
@@ -378,6 +406,11 @@ the handshake, not individual WebSocket frames or messages.
 | Node.js | Best effort | Environment-proxy behavior depends on Node version and HTTP client |
 | Custom transports | Client-dependent | Clients that ignore proxy settings cannot be forced through an explicit proxy |
 
+Node's built-in environment proxy support requires Node 22.21+ or 24.5+.
+Older versions and custom Agents need client-specific explicit proxy settings.
+Run `autocurl doctor` or the IDE **Environment Check** action to see the actual
+runtime paths and compatibility notes.
+
 Go intentionally ignores `SSL_CERT_FILE` on macOS and Windows. Go programs
 built inside the wrapped process tree receive a temporary `crypto/x509` build
 overlay. It does not modify the Go installation or application source. A
@@ -440,7 +473,7 @@ optional `warning`, and copy/output status. Fields may be added compatibly;
 {
   "schema_version": "1",
   "type": "ready",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "proxy_url": "http://127.0.0.1:54321",
   "ca_file": "/tmp/autocurl-.../autocurl-ca.pem",
   "environment": {
@@ -482,7 +515,8 @@ The automated suite covers:
 Release smoke tests make real HTTPS calls through Python, Go, and Java. The Java
 test verifies HTTP/2 from JDK to `autocurl` and from `autocurl` to the upstream.
 Local integration tests verify protocol translation and WebSocket relay without
-external dependencies.
+external dependencies. See [docs/testing.md](docs/testing.md) for the release
+evidence layers and explicitly documented gaps.
 
 ## Development
 
@@ -494,7 +528,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidance,
 [docs/architecture.md](docs/architecture.md) for internals, and
 [docs/debugging.md](docs/debugging.md) for debugger workflows. IDE plugin
 development and packaging are documented in
-[docs/ide-plugins.md](docs/ide-plugins.md).
+[docs/ide-plugins.md](docs/ide-plugins.md). Chinese users can follow the
+[configuration and failure decision tree](docs/troubleshooting.zh-CN.md).
 
 ## License
 

@@ -39,10 +39,15 @@ type shippingAddress struct {
 func main() {
 	defaultURL := os.Getenv("AUTOCURL_DEMO_URL")
 	if defaultURL == "" {
-		defaultURL = "https://httpbin.org/anything"
+		defaultURL = "https://example.com/"
 	}
 	target := flag.String("url", defaultURL, "HTTP endpoint used by the demo")
+	repeat := flag.Int("repeat", 1, "number of GET/POST request pairs to send")
+	delay := flag.Duration("delay", 2*time.Second, "delay between repeated request pairs")
 	flag.Parse()
+	if *repeat < 1 {
+		log.Fatal("-repeat must be at least 1")
+	}
 
 	client := &http.Client{Timeout: 20 * time.Second}
 	ctx := context.Background()
@@ -50,14 +55,23 @@ func main() {
 	log.Printf("Autocurl Go demo target: %s", *target)
 	log.Print("Start this configuration with Run -> Run Selected with Autocurl")
 
-	if err := sendGET(ctx, client, *target); err != nil {
-		log.Fatalf("GET failed: %v", err)
-	}
-	if err := sendPOST(ctx, client, *target); err != nil {
-		log.Fatalf("POST failed: %v", err)
+	for iteration := 1; iteration <= *repeat; iteration++ {
+		if *repeat > 1 {
+			log.Printf("Request pair %d/%d", iteration, *repeat)
+		}
+		if err := sendGET(ctx, client, *target); err != nil {
+			log.Fatalf("GET failed: %v", err)
+		}
+		if err := sendPOST(ctx, client, *target); err != nil {
+			log.Fatalf("POST failed: %v", err)
+		}
+		if iteration < *repeat {
+			time.Sleep(*delay)
+		}
 	}
 
 	log.Print("Done. Open the Autocurl tool window and copy either captured cURL.")
+	log.Print("The documentation target may return 405 for POST; that is expected and still verifies the complete captured body.")
 }
 
 func sendGET(ctx context.Context, client *http.Client, target string) error {

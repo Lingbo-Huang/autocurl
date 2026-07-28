@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- Add Safe and Strict Capture modes with actionable TLS and mTLS diagnostics.
+- Pause recording without interrupting application traffic.
+- Stop the associated Run/Debug session before shutting down the proxy.
+- Keep Clear Requests independent from both the application and proxy lifecycle.
+- Generate cURLs from the editor, JSON files, clipboard, and common Go, Java,
+  Python, Axios, and Fetch request shapes.
+- Preserve all existing bypass settings and diagnose missing listen ports,
+  startup exits, and HTTP clients that ignore proxy environment variables.
+
 ## 0.2.4
 
 - Preserve existing `NO_PROXY`, `no_proxy`, and `no_grpc_proxy` values.

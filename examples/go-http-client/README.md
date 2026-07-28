@@ -15,7 +15,9 @@
 4. 等终端输出 `Done` 后，打开右侧 **Autocurl** 工具窗口。
 5. 左侧应该出现 GET 和 POST 两条请求；选择 POST 后点击 **Copy cURL**。
 
-默认请求发送到 `https://httpbin.org/anything`。如果公司网络无法访问，
+默认请求发送到 `https://example.com/`。它是公开文档示例域名，POST 可能返回
+`405 Method Not Allowed`；这不影响验证完整请求 Body 是否被捕获。如果公司网络
+无法访问，
 可以改成自己的测试接口：
 
 ```bash
