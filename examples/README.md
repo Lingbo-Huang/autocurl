@@ -7,7 +7,7 @@ process-scoped proxy and temporary CA.
 | Language | Entry point | Recommended IDE |
 | --- | --- | --- |
 | Go | `go-http-client/main.go` | GoLand, VS Code, Cursor |
-| Java | `java-client/AutocurlExample.java` | IntelliJ IDEA, VS Code, Cursor |
+| Java | [`java-client/AutocurlExample.java`](java-client/AutocurlExample.java) | IntelliJ IDEA, VS Code, Cursor |
 | Python | `python-client/client.py` | PyCharm, VS Code, Cursor |
 | Node.js | `node-client/client.js` | VS Code, Cursor, WebStorm |
 
@@ -18,6 +18,11 @@ and use **Run and Debug**. Autocurl starts automatically when
 
 For GoLand, first run `go-http-client/main.go` normally once to create a Go
 Build configuration. Then choose **Run > Run Selected with Autocurl**.
+
+For IntelliJ IDEA, open `java-client` as a Maven project, run
+`AutocurlExample.main` normally once, then click **Run Selected** in the
+Autocurl tool window. The [Java example guide](java-client/README.md) includes
+the expected HTTP/2 output and a nested JSON POST body to copy.
 
 To keep the Go demo alive while testing the session controls, add:
 

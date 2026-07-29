@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- Keep the IDE packages aligned with the 0.3.2 engine release.
+- Keep JetBrains tool-window actions visible at the default narrow width.
+- Add an IntelliJ IDEA-ready Maven project for the Java HTTP/2 example.
+- Clarify that bodyless GET requests correctly show only URL and headers.
+
 ## 0.3.1
 
 - Allow cold macOS engine initialization to finish before reporting a startup

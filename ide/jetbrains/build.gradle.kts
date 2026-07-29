@@ -59,6 +59,11 @@ intellijPlatform {
               <li>程序发出请求后，在列表中选择请求，点击 <b>Copy cURL</b>。</li>
             </ol>
             <p>
+              <b>Body 怎么看：</b>GET 通常没有请求体，所以只看到 URL 和 Header
+              是正常的。请选择 POST / PUT / PATCH；请求体会显示在
+              <code>--data-binary</code> 后面。
+            </p>
+            <p>
               <b>断点调试：</b>如果请求还没有真正发出，可在编辑器中选中请求 JSON，
               然后点击 <b>Tools → Generate cURL from Request JSON</b>，
               插件会直接生成并复制 cURL，不会发送网络请求。
@@ -97,11 +102,23 @@ intellijPlatform {
               <li>Select a captured request and click <b>Copy cURL</b>.</li>
             </ol>
             <p>
+              GET requests commonly have no body, so URL and headers alone can be
+              the complete request. Select a POST / PUT / PATCH request to inspect
+              its body after <code>--data-binary</code>.
+            </p>
+            <p>
               At a breakpoint before the request is sent, copy request JSON from the
               debugger and choose <b>Tools → Generate cURL from Request JSON</b>.
             </p>
         """.trimIndent()
         changeNotes = """
+            <h3>0.3.2</h3>
+            <ul>
+              <li>Kept Copy cURL, Quick Start, and the remaining actions visible in narrow tool windows.</li>
+              <li>Added an IntelliJ IDEA-ready Maven project for the Java HTTP/2 example.</li>
+              <li>Clarified why bodyless GET requests show only URL and headers and how to verify POST bodies.</li>
+            </ul>
+
             <h3>0.3.1</h3>
             <ul>
               <li>Kept the JetBrains adapter and managed engine aligned with the 0.3.1 release.</li>

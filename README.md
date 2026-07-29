@@ -25,13 +25,13 @@ cURL commands—without changing application code or the operating-system proxy.
 
 The same Go capture engine now powers two thin IDE plugins:
 
-- **VS Code and Cursor:** install `autocurl-0.3.1.vsix` from
+- **VS Code and Cursor:** install `autocurl-0.3.2.vsix` from
   [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases). Start
   debugging normally. Capture starts automatically, and requests appear under
   **Explorer → Autocurl Requests**. Click a request to inspect it or click its
   action to copy the complete cURL.
 - **IntelliJ IDEA, GoLand, PyCharm, WebStorm, and other JetBrains IDEs:**
-  install `autocurl-jetbrains-0.3.1.zip` with
+  install `autocurl-jetbrains-0.3.2.zip` with
   **Settings → Plugins → ⚙ → Install Plugin from Disk**. Select an existing
   Run/Debug Configuration, then choose
   **Run → Run Selected with Autocurl** or
@@ -41,6 +41,16 @@ The same Go capture engine now powers two thin IDE plugins:
 GoLand users can run [`examples/go-http-client`](examples/go-http-client/README.md)
 immediately. It sends a GET with query parameters and a POST with a nested JSON
 body.
+
+IntelliJ IDEA users can open
+[`examples/java-client`](examples/java-client/README.md) as a Maven project,
+create the normal Java Application configuration once, and then use
+**Run Selected** to verify HTTP/2 capture plus a nested JSON POST body with
+**Copy cURL**.
+
+If the selected GET shows only its URL and headers, that is expected because it
+has no request body. Select the POST row to see the complete body after
+`--data-binary`.
 
 Both plugins download the matching engine from GitHub Releases on first use,
 verify it against `SHA256SUMS`, and store it in IDE-managed storage. If a
@@ -473,7 +483,7 @@ optional `warning`, and copy/output status. Fields may be added compatibly;
 {
   "schema_version": "1",
   "type": "ready",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "proxy_url": "http://127.0.0.1:54321",
   "ca_file": "/tmp/autocurl-.../autocurl-ca.pem",
   "environment": {

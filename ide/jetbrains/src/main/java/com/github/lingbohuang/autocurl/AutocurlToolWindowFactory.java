@@ -23,11 +23,13 @@ import com.intellij.ui.content.ContentFactory;
 import com.intellij.util.ui.JBUI;
 import org.jetbrains.annotations.NotNull;
 
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.datatransfer.StringSelection;
 import java.io.IOException;
@@ -92,17 +94,18 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
             curl.setCaretPosition(0);
         });
 
-        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
-        toolbar.add(run);
-        toolbar.add(debug);
-        toolbar.add(pause);
-        toolbar.add(stop);
-        toolbar.add(copy);
-        toolbar.add(render);
-        toolbar.add(help);
-        toolbar.add(doctor);
-        toolbar.add(clear);
-        toolbar.add(status);
+        JPanel toolbar = buildToolbar(
+                run,
+                debug,
+                pause,
+                stop,
+                copy,
+                render,
+                help,
+                doctor,
+                clear,
+                status
+        );
 
         JBSplitter split = new JBSplitter(false, 0.45f);
         split.setFirstComponent(new JBScrollPane(list));
@@ -151,6 +154,36 @@ public final class AutocurlToolWindowFactory implements ToolWindowFactory, DumbA
 
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         toolWindow.getContentManager().addContent(content);
+    }
+
+    static JPanel buildToolbar(
+            JButton run,
+            JButton debug,
+            JButton pause,
+            JButton stop,
+            JButton copy,
+            JButton render,
+            JButton help,
+            JButton doctor,
+            JButton clear,
+            JLabel status
+    ) {
+        JPanel toolbar = new JPanel();
+        toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.Y_AXIS));
+        toolbar.add(toolbarRow(run, debug, copy));
+        toolbar.add(toolbarRow(pause, stop, clear));
+        toolbar.add(toolbarRow(render, help));
+        toolbar.add(toolbarRow(doctor, status));
+        return toolbar;
+    }
+
+    private static JPanel toolbarRow(Component... components) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        for (Component component : components) {
+            row.add(component);
+        }
+        return row;
     }
 
     private static void runDiagnostics(Project project, CaptureSession session) {
