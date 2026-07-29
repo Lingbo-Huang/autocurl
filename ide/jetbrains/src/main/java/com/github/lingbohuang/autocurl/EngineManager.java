@@ -25,7 +25,7 @@ public final class EngineManager {
     private static final String REPOSITORY = "Lingbo-Huang/autocurl";
     // Keep this aligned with the plugin version. A merely API-compatible older
     // engine can still miss runtime fixes such as platform-specific Go CA trust.
-    private static final String MINIMUM_VERSION = "0.3.0";
+    private static final String MINIMUM_VERSION = "0.3.1";
     private static final Gson GSON = new Gson();
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.ALWAYS)

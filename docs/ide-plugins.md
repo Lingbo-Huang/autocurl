@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.3.0.vsix` with
+Install `autocurl-0.3.1.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -76,7 +76,7 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.3.0.vsix`.
+Output: `ide/vscode/autocurl-0.3.1.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
@@ -92,7 +92,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.3.0.zip` with
+Install `autocurl-jetbrains-0.3.1.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -156,7 +156,7 @@ cd ide/jetbrains
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.0.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.1.zip`.
 
 For a faster local API check against an installed product:
 

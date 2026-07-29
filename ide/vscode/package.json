@@ -2,7 +2,7 @@
   "name": "autocurl",
   "displayName": "Autocurl",
   "description": "Capture outbound requests from IDE debug sessions and copy complete replayable cURLs.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "lingbo-huang",
   "license": "MIT",
   "pricing": "Free",
@@ -274,7 +274,7 @@
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck",
+    "test": "npm run typecheck && node --test test/*.test.cjs",
     "vscode:prepublish": "npm run compile",
     "package": "npm run clean && npm run typecheck && npx @vscode/vsce package --no-dependencies"
   },

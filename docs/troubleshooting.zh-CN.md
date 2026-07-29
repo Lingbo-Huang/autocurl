@@ -149,7 +149,7 @@ Python 的第三方客户端是否理解 CIDR 取决于其代理实现，必要�
 tls: failed to verify certificate: x509: certificate signed by unknown authority
 ```
 
-先确认 IDE 插件和引擎都是 0.3.0：
+先确认 IDE 插件和引擎都是 0.3.1：
 
 - 插件版本在 IDE 插件页；
 - 点击 **Environment Check** 查看实际引擎版本；

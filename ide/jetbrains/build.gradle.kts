@@ -102,6 +102,11 @@ intellijPlatform {
             </p>
         """.trimIndent()
         changeNotes = """
+            <h3>0.3.1</h3>
+            <ul>
+              <li>Kept the JetBrains adapter and managed engine aligned with the 0.3.1 release.</li>
+            </ul>
+
             <h3>0.3.0</h3>
             <ul>
               <li>Added Safe and Strict Capture modes with actionable TLS and mTLS diagnostics.</li>

@@ -60,6 +60,11 @@ interface StateEvent {
 
 type EngineEvent = ReadyEvent | RequestEvent | DiagnosticEvent | StateEvent;
 
+// Cold macOS starts may spend around 20 seconds preparing the Java truststore
+// and Go CA overlay. Keep this above that observed initialization time instead
+// of treating a healthy first launch as a failed engine.
+export const ENGINE_READY_TIMEOUT_MS = 60_000;
+
 export class CaptureSession implements vscode.Disposable {
   private process: ChildProcessWithoutNullStreams | undefined;
   private ready: ReadyEvent | undefined;
@@ -198,7 +203,7 @@ export class CaptureSession implements vscode.Disposable {
           void this.stopEngine();
           reject(new Error("Timed out waiting for the Autocurl engine to become ready."));
         }
-      }, 15000);
+      }, ENGINE_READY_TIMEOUT_MS);
 
       const lines = readline.createInterface({ input: child.stdout });
       lines.on("line", (line) => {

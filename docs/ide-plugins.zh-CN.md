@@ -29,7 +29,7 @@ overlay 传给本次 `go build`。它只修改临时运行配置，不会写回�
 
 ## VS Code / Cursor
 
-安装 `autocurl-0.3.0.vsix` 后，默认直接按 F5：
+安装 `autocurl-0.3.1.vsix` 后，默认直接按 F5：
 
 1. 插件自动启动后台捕获会话。
 2. 在调试程序启动前注入临时代理和证书环境。
@@ -74,7 +74,7 @@ npm ci
 npm run package
 ```
 
-产物：`ide/vscode/autocurl-0.3.0.vsix`。
+产物：`ide/vscode/autocurl-0.3.1.vsix`。
 
 发布 VS Code Marketplace 需要创建 publisher 和凭据。Cursor 使用相同的
 VS Code 扩展格式，其扩展市场以 Open VSX 为底层来源。首次入驻、GitHub
@@ -135,7 +135,7 @@ cd ide/jetbrains
 ```
 
 产物：
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.0.zip`。
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.1.zip`。
 
 使用本机 IDE 快速验证：
 
@@ -178,7 +178,7 @@ rerun**。仍不能监听时，在 Issue 中附上 Run Configuration 类型、�
 tls: failed to verify certificate: x509: “example.com” certificate is not trusted
 ```
 
-先点击 **Environment Check**，确认 IDE 插件和引擎都是 0.3.0。0.2.1 插件曾错误地继续
+先点击 **Environment Check**，确认 IDE 插件和引擎都是 0.3.1。0.2.1 插件曾错误地继续
 复用 0.2.0 引擎，而 0.2.2 在从 macOS 图形界面启动的 GoLand 中又可能找不到
 Go SDK。0.2.3 会从 `GOROOT`、标准安装目录和用户登录 Shell 查找 Go，并强制
 插件与引擎版本匹配，旧的托管引擎会被自动替换；JetBrains 插件还会把临时
@@ -197,9 +197,9 @@ overlay 追加到 GoLand 的编译参数，避免它只进入运行环境、没�
 `SHA256SUMS`。IDE 包要求匹配的引擎版本，避免继续复用缺少运行时修复的旧缓存。
 
 正式 Release 用户由插件自动完成这一步。预发布验收时，如果 IDE 插件版本已经
-是 0.3.0、GitHub 最新 Release 仍是旧版本，自动下载会主动拒绝旧引擎。维护者应
+是 0.3.1、GitHub 最新 Release 仍是旧版本，自动下载会主动拒绝旧引擎。维护者应
 先执行 `make build`，临时将 JetBrains 的 **Engine path** 或 VS Code/Cursor 的
-`autocurl.binaryPath` 指向仓库根目录的 `autocurl`；发布 v0.3.0 后清空该路径，
+`autocurl.binaryPath` 指向仓库根目录的 `autocurl`；发布 v0.3.1 后清空该路径，
 即可按正常用户路径验证自动下载。
 
 IDE 协议的 `ready.environment` 只包含新生成的覆盖值，不会把 IDE 父进程的

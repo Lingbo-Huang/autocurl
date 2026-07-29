@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Allow cold macOS engine initialization to finish before reporting a startup
+  timeout in VS Code and Cursor.
+- Keep the IDE packages aligned with the 0.3.1 engine release.
+
 ## 0.3.0
 
 - Add Safe and Strict Capture modes with actionable TLS and mTLS diagnostics.
