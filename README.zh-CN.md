@@ -29,7 +29,7 @@ HTTP(S)、HTTP/2、gRPC 传输和 WebSocket 握手快速转换成可复制的 cU
 ### VS Code / Cursor
 
 1. 从 [GitHub Releases](https://github.com/Lingbo-Huang/autocurl/releases)
-   下载 `autocurl-0.3.1.vsix`。
+   下载 `autocurl-0.3.2.vsix`。
 2. 在命令面板执行 **Extensions: Install from VSIX...**。
 3. 像平时一样点击 Debug 或按 F5。
 4. 打开 **Explorer → Autocurl Requests**。点击某个请求查看完整 cURL，
@@ -40,7 +40,7 @@ HTTP(S)、HTTP/2、gRPC 传输和 WebSocket 握手快速转换成可复制的 cU
 
 ### IntelliJ IDEA / GoLand / PyCharm / WebStorm
 
-1. 从 Releases 下载 `autocurl-jetbrains-0.3.1.zip`。
+1. 从 Releases 下载 `autocurl-jetbrains-0.3.2.zip`。
 2. 打开 **Settings → Plugins → ⚙ → Install Plugin from Disk**。
 3. 选择已有的 Run/Debug Configuration。
 4. 使用 **Run → Run Selected with Autocurl** 或
@@ -63,13 +63,21 @@ GoLand 用户可以直接运行
 [`examples/go-http-client`](examples/go-http-client/README.md) 验证。示例会发出
 一个带 Query 的 GET 和一个带嵌套 JSON Body 的 POST。
 
+IntelliJ IDEA 用户可以把
+[`examples/java-client`](examples/java-client/README.md) 作为 Maven 项目打开，
+先普通运行一次 `AutocurlExample.main` 创建 Application 配置，再在 Autocurl
+工具窗口点击 **Run Selected**。示例会发送 GET 和带嵌套 JSON Body 的 POST，
+可以直接验证 Java HTTP/2 捕获及 **Copy cURL** 是否保留完整 Body。
+选中 GET 时只看到 URL 和 Header 是正常的，因为该 GET 本身没有 Body；
+请选择 POST 行，Body 会完整显示在 `--data-binary` 后面。
+
 两个插件首次使用时都会从 GitHub Release 下载匹配当前操作系统和 CPU 的
 Go 引擎，并使用 `SHA256SUMS` 校验。如果公司网络不能访问 GitHub，可以只安装
 一次二进制，然后在 VS Code/Cursor 的 `autocurl.binaryPath`，或 JetBrains 的
 **Settings → Tools → Autocurl** 中配置路径。
 
-从正式 GitHub Release 安装的用户不需要手动配置引擎。只有“先拿到 0.3.1
-IDE 包、但 0.3.1 Release 尚未发布”的预发布测试会看到“最新 Release 版本过旧”：
+从正式 GitHub Release 安装的用户不需要手动配置引擎。只有“先拿到 0.3.2
+IDE 包、但 0.3.2 Release 尚未发布”的预发布测试会看到“最新 Release 版本过旧”：
 此时先在仓库执行 `make build`，再把上述路径指向仓库根目录的 `autocurl`。
 Release 发布后清空手动路径即可恢复自动下载和升级。
 

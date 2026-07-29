@@ -13,6 +13,12 @@ final class AutocurlHelp {
             4. 在左侧选择请求，右侧会显示完整 cURL。
             5. 点击 Copy cURL，或双击左侧请求，复制到剪贴板。
 
+            Body 怎么看：
+            GET 请求通常没有 Body，所以只看到 URL 和 Header 是正常的。
+            请选择 POST / PUT / PATCH 请求；有请求体时，完整内容会显示在
+            --data-binary 后面。默认最多保留 1 MiB，可在 Settings → Tools → Autocurl
+            的 Maximum body bytes 中调整；超过上限时会明确标记 truncated。
+
             断点调试：
             请求尚未发出时，从 Variables / Watches 复制请求对象的 JSON，
             再点击 Generate cURL from JSON。插件会优先读取编辑器选区，

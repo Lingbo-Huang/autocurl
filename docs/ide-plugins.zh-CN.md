@@ -29,7 +29,7 @@ overlay 传给本次 `go build`。它只修改临时运行配置，不会写回�
 
 ## VS Code / Cursor
 
-安装 `autocurl-0.3.1.vsix` 后，默认直接按 F5：
+安装 `autocurl-0.3.2.vsix` 后，默认直接按 F5：
 
 1. 插件自动启动后台捕获会话。
 2. 在调试程序启动前注入临时代理和证书环境。
@@ -74,7 +74,7 @@ npm ci
 npm run package
 ```
 
-产物：`ide/vscode/autocurl-0.3.1.vsix`。
+产物：`ide/vscode/autocurl-0.3.2.vsix`。
 
 发布 VS Code Marketplace 需要创建 publisher 和凭据。Cursor 使用相同的
 VS Code 扩展格式，其扩展市场以 Open VSX 为底层来源。首次入驻、GitHub
@@ -96,6 +96,16 @@ Secrets 和打 tag 自动发布的完整步骤见
 想立即验证 GoLand 插件，可以直接运行仓库中的
 [`examples/go-http-client`](../examples/go-http-client/README.md)。它会发出一个
 带 Query 的 GET 和一个带嵌套 JSON Body 的 POST，并携带 `get-info: true`。
+
+想验证 IntelliJ IDEA 和 Java HTTP/2，可以把
+[`examples/java-client`](../examples/java-client/README.md) 作为 Maven 项目打开。
+先普通运行一次 `AutocurlExample.main` 创建 Application 配置，再在 Autocurl
+工具窗口点击 **Run Selected**；GET 捕获结果应包含 `--http2`，POST 捕获结果
+应包含完整的 `--data-binary` 嵌套 JSON Body。
+
+如果选中 GET 后只看到 URL 和 Header，这是正常现象：该 GET 请求本身没有
+Body。请选择 POST 行验证 Body 抓取；有请求体时会显示在 `--data-binary`
+后面。默认最多保留 1 MiB，超过 `Maximum body bytes` 时会明确标记为截断。
 
 原始 Run Configuration 不会被写入代理配置。常见 Java、Go、Python、
 Node.js、Gradle 等配置使用的环境变量接口并不完全相同；插件分别适配通用
@@ -135,7 +145,7 @@ cd ide/jetbrains
 ```
 
 产物：
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.1.zip`。
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.2.zip`。
 
 使用本机 IDE 快速验证：
 
@@ -178,7 +188,7 @@ rerun**。仍不能监听时，在 Issue 中附上 Run Configuration 类型、�
 tls: failed to verify certificate: x509: “example.com” certificate is not trusted
 ```
 
-先点击 **Environment Check**，确认 IDE 插件和引擎都是 0.3.1。0.2.1 插件曾错误地继续
+先点击 **Environment Check**，确认 IDE 插件和引擎都是 0.3.2。0.2.1 插件曾错误地继续
 复用 0.2.0 引擎，而 0.2.2 在从 macOS 图形界面启动的 GoLand 中又可能找不到
 Go SDK。0.2.3 会从 `GOROOT`、标准安装目录和用户登录 Shell 查找 Go，并强制
 插件与引擎版本匹配，旧的托管引擎会被自动替换；JetBrains 插件还会把临时
@@ -197,9 +207,9 @@ overlay 追加到 GoLand 的编译参数，避免它只进入运行环境、没�
 `SHA256SUMS`。IDE 包要求匹配的引擎版本，避免继续复用缺少运行时修复的旧缓存。
 
 正式 Release 用户由插件自动完成这一步。预发布验收时，如果 IDE 插件版本已经
-是 0.3.1、GitHub 最新 Release 仍是旧版本，自动下载会主动拒绝旧引擎。维护者应
+是 0.3.2、GitHub 最新 Release 仍是旧版本，自动下载会主动拒绝旧引擎。维护者应
 先执行 `make build`，临时将 JetBrains 的 **Engine path** 或 VS Code/Cursor 的
-`autocurl.binaryPath` 指向仓库根目录的 `autocurl`；发布 v0.3.1 后清空该路径，
+`autocurl.binaryPath` 指向仓库根目录的 `autocurl`；发布 v0.3.2 后清空该路径，
 即可按正常用户路径验证自动下载。
 
 IDE 协议的 `ready.environment` 只包含新生成的覆盖值，不会把 IDE 父进程的

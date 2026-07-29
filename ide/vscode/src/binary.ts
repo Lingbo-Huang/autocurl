@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 const repository = "Lingbo-Huang/autocurl";
 // Keep this aligned with the extension version. Older engines may be protocol
 // compatible while still missing runtime fixes such as platform Go CA trust.
-const minimumVersion = "0.3.1";
+const minimumVersion = "0.3.2";
 
 interface ReleaseAsset {
   name: string;

@@ -19,7 +19,7 @@ environment injection, request presentation, clipboard, and settings.
 
 ## VS Code and Cursor
 
-Install `autocurl-0.3.1.vsix` with
+Install `autocurl-0.3.2.vsix` with
 **Extensions: Install from VSIX...**. Cursor is based on the VS Code codebase,
 so the same extension package is used.
 
@@ -76,7 +76,7 @@ npm ci
 npm run package
 ```
 
-Output: `ide/vscode/autocurl-0.3.1.vsix`.
+Output: `ide/vscode/autocurl-0.3.2.vsix`.
 
 `@vscode/vsce` runs TypeScript type checking and an esbuild production bundle
 before creating the VSIX. Publishing to the Visual Studio Marketplace requires
@@ -92,7 +92,7 @@ The plugin supports IntelliJ Platform build 251 (2025.1) and newer. It uses
 only platform APIs, so one ZIP serves IntelliJ IDEA, GoLand, PyCharm, WebStorm,
 and other compatible products.
 
-Install `autocurl-jetbrains-0.3.1.zip` with
+Install `autocurl-jetbrains-0.3.2.zip` with
 **Settings → Plugins → ⚙ → Install Plugin from Disk**.
 
 Default workflow:
@@ -108,6 +108,18 @@ To verify the GoLand integration immediately, run
 [`examples/go-http-client`](../examples/go-http-client/README.md). It sends a
 GET with query parameters and a POST with a nested JSON body, both carrying
 `get-info: true`.
+
+To verify Java HTTP/2 capture in IntelliJ IDEA, open
+[`examples/java-client`](../examples/java-client/README.md) as a Maven project,
+run `AutocurlExample.main` normally once to create the Application
+configuration, and then click **Run Selected** in the Autocurl tool window.
+The GET demonstrates HTTP/2, while the POST demonstrates a nested JSON body in
+`--data-binary`.
+
+Seeing only the URL and headers when the GET row is selected is expected: that
+request has no body. Select the POST row to verify body capture. Requests with
+a body show it after `--data-binary`; bodies larger than the configured
+`Maximum body bytes` are explicitly marked as truncated.
 
 The original configuration is not persisted with proxy values. Run
 configurations use more than one environment interface. The plugin supports
@@ -156,7 +168,7 @@ cd ide/jetbrains
 ```
 
 Output:
-`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.1.zip`.
+`ide/jetbrains/build/distributions/autocurl-jetbrains-0.3.2.zip`.
 
 For a faster local API check against an installed product:
 
