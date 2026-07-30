@@ -3,6 +3,7 @@ package com.github.lingbohuang.autocurl;
 import com.intellij.openapi.options.Configurable;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.openapi.ui.ComboBox;
+import com.intellij.ui.ScrollPaneFactory;
 import com.intellij.ui.components.JBTextArea;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.FormBuilder;
@@ -11,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -54,13 +56,27 @@ public final class AutocurlConfigurable implements Configurable {
                 .addComponent(showSecrets)
                 .addLabeledComponent(
                         "Bypass capture (mTLS/infrastructure; one host, IP, domain suffix, or CIDR per line):",
-                        bypassTargets)
-                .addLabeledComponent("Replay-only headers (one per line):", replayHeaders)
-                .addLabeledComponent("Live headers (one per line):", liveHeaders)
+                        multilineInput(bypassTargets))
+                .addLabeledComponent(
+                        "Replay-only headers (one per line):",
+                        multilineInput(replayHeaders))
+                .addLabeledComponent(
+                        "Live headers (one per line):",
+                        multilineInput(liveHeaders))
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
         reset();
         return panel;
+    }
+
+    static JScrollPane multilineInput(JBTextArea textArea) {
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+        return ScrollPaneFactory.createScrollPane(
+                textArea,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+        );
     }
 
     @Override

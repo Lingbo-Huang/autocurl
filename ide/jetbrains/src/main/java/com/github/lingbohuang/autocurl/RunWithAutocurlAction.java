@@ -1,9 +1,13 @@
 package com.github.lingbohuang.autocurl;
 
 import com.intellij.execution.Executor;
+import com.intellij.execution.ExecutionException;
 import com.intellij.execution.ProgramRunnerUtil;
 import com.intellij.execution.RunManager;
 import com.intellij.execution.RunnerAndConfigurationSettings;
+import com.intellij.execution.runners.ExecutionEnvironment;
+import com.intellij.execution.runners.ExecutionEnvironmentBuilder;
+import com.intellij.execution.BeforeRunTask;
 import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -13,6 +17,9 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.wm.ToolWindow;
 import com.intellij.openapi.wm.ToolWindowManager;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.ArrayList;
+import java.util.List;
 
 abstract class RunWithAutocurlAction extends AnAction {
     protected abstract Executor executor();
@@ -33,14 +40,15 @@ abstract class RunWithAutocurlAction extends AnAction {
     }
 
     static void run(Project project, Executor executor) {
-        RunnerAndConfigurationSettings selected =
-                RunManager.getInstance(project).getSelectedConfiguration();
+        RunManager runManager = RunManager.getInstance(project);
+        RunnerAndConfigurationSettings selected = runManager.getSelectedConfiguration();
         if (selected == null) {
             Messages.showWarningDialog(project, "Select a Run/Debug configuration first.", "Autocurl");
             return;
         }
-        RunnerAndConfigurationSettings temporary = selected.createFactory().create();
+        RunnerAndConfigurationSettings temporary = copySelectedConfiguration(runManager, selected);
         temporary.setTemporary(true);
+        temporary.setEditBeforeRun(false);
         temporary.setName(selected.getName() + " [Autocurl]");
         RunConfiguration configuration = temporary.getConfiguration();
         if (!RunConfigurationEnvironment.supports(configuration)) {
@@ -81,8 +89,12 @@ abstract class RunWithAutocurlAction extends AnAction {
             }
             session.expectProfile(configuration);
             try {
-                ProgramRunnerUtil.executeConfiguration(project, temporary, executor);
-            } catch (RuntimeException launchError) {
+                ExecutionEnvironment environment = ExecutionEnvironmentBuilder
+                        .create(executor, temporary)
+                        .activeTarget()
+                        .build();
+                ProgramRunnerUtil.executeConfiguration(environment, false, true);
+            } catch (ExecutionException | RuntimeException launchError) {
                 session.cancelExpectedProfile(configuration);
                 session.stopSession();
                 Messages.showErrorDialog(
@@ -95,6 +107,27 @@ abstract class RunWithAutocurlAction extends AnAction {
             ToolWindow window = ToolWindowManager.getInstance(project).getToolWindow("Autocurl");
             if (window != null) window.show();
         }));
+    }
+
+    static RunnerAndConfigurationSettings copySelectedConfiguration(
+            RunManager runManager,
+            RunnerAndConfigurationSettings selected
+    ) {
+        RunConfiguration clonedConfiguration = selected.getConfiguration().clone();
+        List<BeforeRunTask<?>> beforeRunTasks =
+                new ArrayList<>(clonedConfiguration.getBeforeRunTasks());
+        RunnerAndConfigurationSettings copied =
+                runManager.createConfiguration(clonedConfiguration, selected.getFactory());
+
+        // RunManager initializes a new settings wrapper from the configuration template,
+        // which can replace the cloned configuration's before-run tasks. Restore the
+        // cloned tasks so the temporary Autocurl run behaves exactly like the original.
+        copied.getConfiguration().setBeforeRunTasks(beforeRunTasks);
+        copied.setActivateToolWindowBeforeRun(selected.isActivateToolWindowBeforeRun());
+        copied.setFocusToolWindowBeforeRun(selected.isFocusToolWindowBeforeRun());
+        copied.setSingleton(selected.isSingleton());
+        copied.setFolderName(selected.getFolderName());
+        return copied;
     }
 
     private static String rootMessage(Throwable error) {

@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autocurl——别再手工重建 cURL</title>
+    <meta
+      name="description"
+      content="在 JetBrains IDE、VS Code 和 Cursor 中捕获代码真正发出的出站请求，包括 Header、嵌套 Body 和协议，并一键复制完整 cURL。"
+    >
+    <meta name="theme-color" content="#ffffff">
+    <meta name="color-scheme" content="light">
+    <link rel="canonical" href="https://lingbo-huang.github.io/autocurl/zh/">
+    <link rel="alternate" hreflang="en" href="https://lingbo-huang.github.io/autocurl/">
+    <link rel="alternate" hreflang="zh-CN" href="https://lingbo-huang.github.io/autocurl/zh/">
+    <link rel="icon" href="../assets/autocurl-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="../styles.css">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Autocurl——别再手工重建 cURL">
+    <meta
+      property="og:description"
+      content="零业务代码改动、零系统代理修改，捕获当前 Run/Debug 进程真正发出的请求并复制为 cURL。"
+    >
+    <meta property="og:url" content="https://lingbo-huang.github.io/autocurl/zh/">
+    <meta
+      property="og:image"
+      content="https://lingbo-huang.github.io/autocurl/assets/autocurl-goland-post.jpg"
+    >
+    <meta name="twitter:card" content="summary_large_image">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到正文</a>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="../" aria-label="Autocurl 首页">
+          <img src="../assets/autocurl-mark.svg" alt="" width="34" height="34">
+          <span>Autocurl</span>
+        </a>
+        <nav class="site-nav" aria-label="主导航">
+          <a href="#how-it-works">工作方式</a>
+          <a href="#demos">真实演示</a>
+          <a href="#protocols">协议支持</a>
+          <a href="#trust">安全边界</a>
+          <a href="#teams">团队版</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl">GitHub</a>
+        </nav>
+        <a class="language-link" href="../" lang="en">EN</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <h1>别再手工<br>重建 cURL。</h1>
+            <p class="hero-lede">
+              在 IDE 内捕获代码真正发出的出站请求——Header、嵌套 Body
+              和协议细节一个不少。不引入 SDK，不修改系统代理。
+            </p>
+            <div class="hero-actions">
+              <a
+                class="button button-primary js-latest-release"
+                href="https://github.com/Lingbo-Huang/autocurl/releases/latest"
+              >
+                安装 <span class="js-release-version">v0.3.2</span>
+              </a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/Lingbo-Huang/autocurl"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 .7a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.52-1.34-1.28-1.7-1.28-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.57-.3-5.28-1.29-5.28-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.71 5.39-5.29 5.68.42.36.79 1.07.79 2.16v3.2c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"/>
+                </svg>
+                在 GitHub 查看
+              </a>
+            </div>
+            <p class="proof-rail" aria-label="支持的语言与协议">
+              <span>Go</span><span>Java</span><span>Python</span><span>Node.js</span>
+              <i aria-hidden="true"></i>
+              <span>HTTP/1.1</span><span>HTTP/2</span><span>gRPC</span><span>WebSocket</span>
+            </p>
+          </div>
+
+          <figure class="product-shot">
+            <img
+              src="../assets/autocurl-goland-post.jpg"
+              alt="Autocurl 在 GoLand 中捕获 GET 和带嵌套 JSON Body 的 POST"
+              width="1276"
+              height="768"
+            >
+            <figcaption>GoLand 真实捕获：选中 POST，完整嵌套 Body 一键复制。</figcaption>
+          </figure>
+          <div class="request-trace" aria-hidden="true"><i></i></div>
+        </div>
+      </section>
+
+      <section class="section workflow-section" id="how-it-works">
+        <div class="shell">
+          <h2>从运行代码到可复现的 cURL。</h2>
+          <ol class="workflow">
+            <li>
+              <span class="step-number">1</span>
+              <div><h3>照常运行代码</h3><p>启动已有的 Run 或 Debug 配置。</p></div>
+            </li>
+            <li>
+              <span class="step-number">2</span>
+              <div><h3>Autocurl 自动捕获</h3><p>观察这个进程真正发出的出站请求。</p></div>
+            </li>
+            <li>
+              <span class="step-number">3</span>
+              <div><h3>复制并复现</h3><p>选中请求，一键复制完整 cURL。</p></div>
+            </li>
+          </ol>
+
+          <div class="capture-demo" aria-label="Autocurl 请求捕获示例">
+            <div class="request-list">
+              <div class="request-list-head">示例请求</div>
+              <button class="request-row is-selected" type="button" data-request="get">
+                <strong>GET</strong><span>api.example.com/v1/users</span><small>HTTP/2</small>
+              </button>
+              <button class="request-row" type="button" data-request="post">
+                <strong>POST</strong><span>api.example.com/v1/orders</span><small>HTTP/2 · JSON Body</small>
+              </button>
+              <button class="request-row" type="button" data-request="wss">
+                <strong>WSS</strong><span>stream.example.com/v1/events</span><small>WebSocket 握手</small>
+              </button>
+            </div>
+            <div class="curl-panel">
+              <div class="curl-panel-head">
+                <span>cURL</span>
+                <button class="copy-button" type="button" data-copy-curl>
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2m-8-10H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H9Z"/>
+                  </svg>
+                  <span>复制 cURL</span>
+                </button>
+              </div>
+              <pre><code data-curl-output>curl \
+  --request 'GET' \
+  --url 'https://api.example.com/v1/users?active=true' \
+  --http2 \
+  --header 'Accept: application/json' \
+  --header 'Authorization: [REDACTED]'</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section demos-section" id="demos">
+        <div class="shell">
+          <div class="section-intro demos-intro">
+            <p class="eyebrow">真实工作流 · 不修改业务代码</p>
+            <h2>七段实录，覆盖那些最容易踩坑的场景。</h2>
+            <p>跨 JetBrains IDE、VS Code 与 Cursor；只有点击播放时才加载视频。</p>
+          </div>
+          <div class="demo-grid">
+            <article class="demo-card demo-card-featured">
+              <video controls preload="none" playsinline poster="../assets/videos/01-jetbrains-java-post.png">
+                <source src="../assets/videos/01-jetbrains-java-post.mp4" type="video/mp4">
+              </video>
+              <div><span>01 · JetBrains</span><h3>完整 Java POST</h3><p>捕获 HTTP/2、脱敏 Header 与多层嵌套 JSON Body。</p></div>
+            </article>
+            <article class="demo-card demo-card-featured">
+              <video controls preload="none" playsinline poster="../assets/videos/02-vscode-node-debug-autocapture.png">
+                <source src="../assets/videos/02-vscode-node-debug-autocapture.mp4" type="video/mp4">
+              </video>
+              <div><span>02 · VS Code</span><h3>Debug 自动捕获</h3><p>照常启动 Node.js Debug，无需额外执行 CLI 命令。</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="../assets/videos/03-breakpoint-json-to-curl.png">
+                <source src="../assets/videos/03-breakpoint-json-to-curl.mp4" type="video/mp4">
+              </video>
+              <div><span>03 · 离线</span><h3>JSON 生成 cURL</h3><p>请求尚未发送，也能离线生成可复现的 cURL。</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="../assets/videos/04-bypass-capture.png">
+                <source src="../assets/videos/04-bypass-capture.mp4" type="video/mp4">
+              </video>
+              <div><span>04 · Safe mode</span><h3>绕过敏感目标</h3><p>让 mTLS、证书固定、域名、IP 与 CIDR 目标保持端到端直连。</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="../assets/videos/05-custom-client-explicit-proxy.png">
+                <source src="../assets/videos/05-custom-client-explicit-proxy.mp4" type="video/mp4">
+              </video>
+              <div><span>05 · GoLand</span><h3>自定义 HTTP Client</h3><p>对比 Proxy:nil 与显式读取本次进程代理后的捕获结果。</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="../assets/videos/06-pycharm-standard-run-configuration.png">
+                <source src="../assets/videos/06-pycharm-standard-run-configuration.mp4" type="video/mp4">
+              </video>
+              <div><span>06 · PyCharm</span><h3>非标准与标准配置</h3><p>Compound 不暴露环境变量，标准 Python 配置可以安全注入。</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="../assets/videos/07-cursor-restart-under-autocurl.png">
+                <source src="../assets/videos/07-cursor-restart-under-autocurl.mp4" type="video/mp4">
+              </video>
+              <div><span>07 · Cursor</span><h3>必须重新 Debug</h3><p>已运行进程保持不变；重新启动的 Debug 进程才会被捕获。</p></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="protocol-section" id="protocols">
+        <div class="shell protocol-inner">
+          <div>
+            <h2>一条捕获链路，支持四种语言。</h2>
+            <p>Header、嵌套 JSON Body、Query 参数和协议细节始终保持在一起。</p>
+          </div>
+          <div class="support-lines">
+            <p><b>语言</b><span>Go</span><span>Java</span><span>Python</span><span>Node.js</span></p>
+            <p><b>协议</b><span>HTTP/1.1</span><span>HTTP/2</span><span>gRPC</span><span>WebSocket</span></p>
+            <p><b>IDE</b><span>JetBrains</span><span>VS Code</span><span>Cursor</span></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section trust-section" id="trust">
+        <div class="shell">
+          <div class="section-intro">
+            <h2>只捕获一个进程，<br>不打扰整台电脑。</h2>
+            <p>Autocurl 只为你选中的 Run 或 Debug 进程创建临时代理会话。</p>
+          </div>
+
+          <div class="trust-grid">
+            <div class="scope-diagram" aria-label="Autocurl 进程作用域示意图">
+              <div class="diagram-node ide-node">
+                <span class="node-icon">&lt;/&gt;</span><b>IDE</b><small>Run / Debug 配置</small>
+              </div>
+              <span class="diagram-arrow" aria-hidden="true"></span>
+              <div class="process-boundary">
+                <span class="boundary-label">仅限选中的进程</span>
+                <div class="diagram-node autocurl-node">
+                  <img src="../assets/autocurl-mark.svg" alt="" width="42" height="42">
+                  <b>Autocurl 会话</b><small>临时代理 · 自动结束</small>
+                </div>
+              </div>
+              <span class="diagram-arrow" aria-hidden="true"></span>
+              <div class="diagram-node service-node">
+                <span class="node-icon">↗</span><b>出站服务</b><small>HTTP · gRPC · WebSocket</small>
+              </div>
+              <div class="untouched">
+                <b>作用域之外</b><span>操作系统代理</span><span>其他应用和后台流量</span><em>Autocurl 不修改</em>
+              </div>
+            </div>
+
+            <ul class="trust-list">
+              <li><i>✓</i><div><b>不引入业务 SDK</b><span>业务应用不用 import、安装或链接任何包。</span></div></li>
+              <li><i>✓</i><div><b>不修改系统代理</b><span>系统网络设置保持原样。</span></div></li>
+              <li><i>✓</i><div><b>不永久安装 CA</b><span>临时信任只作用于被捕获进程。</span></div></li>
+              <li><i>✓</i><div><b>默认脱敏</b><span>常见凭据在展示和导出前自动隐藏。</span></div></li>
+              <li class="normal-run"><i>→</i><div><b>普通 Run / Debug 不受影响。</b><span>只有 Autocurl 操作才创建捕获会话。</span></div></li>
+            </ul>
+          </div>
+
+          <div class="infrastructure-band">
+            <div>
+              <h3>能适应真实的基础设施。</h3>
+              <p>
+                Safe 模式会让不兼容目标保持端到端 TLS。可以绕过 mTLS、证书固定、
+                内部基础设施、域名、IP 或 CIDR，同时继续捕获会话中的其他请求。
+              </p>
+            </div>
+            <pre aria-label="Autocurl 绕过目标示例"><code><span># 让基础设施保持直连</span>
+autocurl run --all \
+  --bypass 10.0.0.0/8 \
+  -- go run .</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section open-source-section" id="teams">
+        <div class="shell open-source-grid">
+          <div>
+            <h2>开发者免费，<br>团队能力可持续。</h2>
+            <p>本地捕获引擎和个人 IDE 工作流继续以 MIT 协议开源。</p>
+            <p>团队需要的不只是一条 cURL：还需要共享脱敏策略、工作区预设、私有分发和支持。</p>
+          </div>
+          <div class="policy-flow" aria-label="开源引擎与可选团队策略">
+            <div>
+              <img src="../assets/autocurl-mark.svg" alt="" width="40" height="40">
+              <b>本地捕获引擎</b><span>永久免费开源</span>
+            </div>
+            <pre><code>redact:
+  - Authorization
+  - Cookie
+preserve:
+  - Content-Type</code></pre>
+            <div><b>团队层</b><span>共享策略 · 分发 · 支持</span></div>
+          </div>
+        </div>
+
+        <div class="team-band">
+          <div class="shell team-grid">
+            <div>
+              <h3>团队需要共享上下文。<br>一起试点 Autocurl。</h3>
+              <p>把一致的捕获、脱敏和分发能力带进工程团队的开发流程。</p>
+              <div class="team-actions">
+                <a
+                  class="button button-primary"
+                  href="https://github.com/Lingbo-Huang/autocurl/issues/new?template=team_pilot.yml"
+                >
+                  申请团队试点
+                </a>
+                <a
+                  class="button button-dark-secondary"
+                  href="https://github.com/Lingbo-Huang/autocurl/blob/main/ROADMAP.md"
+                >
+                  查看路线图
+                </a>
+              </div>
+            </div>
+            <pre><code><span># workspace-policy.yml</span>
+redact:
+  - Authorization
+  - Cookie
+  - X-Api-Key
+preserve:
+  - Accept
+  - Content-Type
+  - User-Agent</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section install-section" id="install">
+        <div class="shell install-grid">
+          <div>
+            <h2>把时间花在问题上，<br>别花在拼 cURL 上。</h2>
+            <p>安装 Autocurl，运行已有配置，然后复制代码真正发出的请求。</p>
+          </div>
+          <div class="install-links">
+            <a data-release-asset="jetbrains" href="https://github.com/Lingbo-Huang/autocurl/releases/latest">
+              <span>JetBrains</span><small>IDEA · GoLand · PyCharm · WebStorm</small><b>→</b>
+            </a>
+            <a data-release-asset="vscode" href="https://github.com/Lingbo-Huang/autocurl/releases/latest">
+              <span>VS Code / Cursor</span><small>安装 VSIX 插件包</small><b>→</b>
+            </a>
+            <a href="https://github.com/Lingbo-Huang/autocurl/blob/main/README.zh-CN.md#安装">
+              <span>CLI</span><small>Go install 或预编译包</small><b>→</b>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <a class="brand footer-brand" href="../">
+          <img src="../assets/autocurl-mark.svg" alt="" width="28" height="28">
+          <span>Autocurl</span>
+        </a>
+        <nav aria-label="页脚导航">
+          <a href="https://github.com/Lingbo-Huang/autocurl">GitHub</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/blob/main/README.zh-CN.md">使用文档</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/releases">版本发布</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/blob/main/PRIVACY.md">隐私</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/blob/main/LICENSE">MIT 协议</a>
+        </nav>
+        <p>由 Huang Lingbo 开源构建。</p>
+      </div>
+    </footer>
+
+    <script src="../app.js" defer></script>
+  </body>
+</html>

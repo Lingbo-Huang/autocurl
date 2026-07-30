@@ -3,7 +3,7 @@
 Autocurl processes captured requests locally on the developer's machine.
 
 - It has no Autocurl account, cloud backend, analytics, advertising, or
-  telemetry in version 0.3.0.
+  telemetry in version 0.3.2.
 - Request metadata, bodies, generated cURLs, and temporary certificate keys are
   not uploaded to the project author.
 - IDE plugins contact GitHub only to check for and download a compatible
@@ -25,7 +25,7 @@ Questions and security reports should follow [SECURITY.md](SECURITY.md).
 
 ## 中文
 
-Autocurl 在开发者本机处理请求。0.3.0 没有账号、云端服务、广告、分析或遥测，
+Autocurl 在开发者本机处理请求。0.3.2 没有账号、云端服务、广告、分析或遥测，
 不会把请求、Body、cURL 或临时证书私钥上传给作者。IDE 插件仅在启用自动下载时
 访问 GitHub 获取匹配引擎。
 

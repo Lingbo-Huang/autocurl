@@ -6,6 +6,8 @@
 - Keep JetBrains tool-window actions visible at the default narrow width.
 - Add an IntelliJ IDEA-ready Maven project for the Java HTTP/2 example.
 - Clarify that bodyless GET requests correctly show only URL and headers.
+- Allow macOS security scanning to finish before rejecting a newly downloaded
+  Autocurl engine during its version check.
 
 ## 0.3.1
 

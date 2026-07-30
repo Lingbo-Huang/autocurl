@@ -1,7 +1,7 @@
-<idea-plugin url="https://github.com/Lingbo-Huang/autocurl">
+<idea-plugin url="https://lingbo-huang.github.io/autocurl/">
     <id>com.github.lingbohuang.autocurl</id>
     <name>Autocurl</name>
-    <vendor url="https://github.com/Lingbo-Huang/autocurl">Huang Lingbo</vendor>
+    <vendor url="https://lingbo-huang.github.io/autocurl/">Huang Lingbo</vendor>
 
     <depends>com.intellij.modules.platform</depends>
 

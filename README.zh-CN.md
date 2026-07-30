@@ -6,11 +6,16 @@
 
 [English README](README.md)
 
-[隐私说明](PRIVACY.md) · [支持与反馈](SUPPORT.md)
+[官网](https://lingbo-huang.github.io/autocurl/zh/) ·
+[路线图](ROADMAP.md) · [隐私说明](PRIVACY.md) · [支持与反馈](SUPPORT.md)
 
 `autocurl` 是 IDE 原生、只作用于当前 Run/Debug 进程的出站请求捕获工具：
 不修改业务代码，不修改系统代理，把 Go、Java、Python、Node.js 应用真正发出的
 HTTP(S)、HTTP/2、gRPC 传输和 WebSocket 握手快速转换成可复制的 cURL。
+
+项目推广、内容发布和团队商业化验证资料见
+[技术影响力与商业化计划](docs/growth-and-monetization.zh-CN.md)及
+[宣发素材包](docs/launch-kit.zh-CN.md)。
 
 ## 30 秒 Quick Start
 
@@ -90,6 +95,13 @@ JetBrains 插件页显示的是 IDE 插件版本；后台 Go 引擎是另一个�
 剪贴板，并提供 Go、Java、Python、Axios、Fetch 模板。它只生成并复制 cURL，
 不会发送网络请求。详见
 [断点对象生成 cURL 指南](docs/generate-curl-from-json.zh-CN.md)。
+
+需要录制或复现完整演示时，按
+[人工点击录制脚本](docs/demo-recording-runbook.zh-CN.md) 执行；字幕、验收标准和
+PixPin 窗口录制方法见
+[PixPin 窗口录屏与 7 组演示分镜](docs/demo-videos.zh-CN.md)。两份文档只使用
+仓库公开 `examples`，覆盖 Java POST Body、VS Code/Cursor Debug、断点 JSON、
+Bypass、自定义 HTTP Client、非标准 Run Configuration 和已运行进程重启。
 
 ### Pause、Stop、Clear 到底做什么
 
@@ -315,7 +327,9 @@ autocurl doctor
 
 更多协议、安全和架构信息请查看 [English README](README.md)、
 [调试指南](docs/debugging.md)、[故障诊断指南](docs/troubleshooting.zh-CN.md) 与
-[IDE 插件指南](docs/ide-plugins.zh-CN.md)。
+[IDE 插件指南](docs/ide-plugins.zh-CN.md)。公开演示的录制规范见
+[人工点击录制脚本](docs/demo-recording-runbook.zh-CN.md) 和
+[演示视频指南](docs/demo-videos.zh-CN.md)。
 
 仓库还提供无第三方依赖的
 [Go](examples/go-client/main.go)、[Python](examples/python-client/client.py)、

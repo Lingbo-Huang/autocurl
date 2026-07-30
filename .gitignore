@@ -20,3 +20,4 @@ out/
 
 # Example project build output
 /examples/java-client/target/
+/examples/python-client/.venv/

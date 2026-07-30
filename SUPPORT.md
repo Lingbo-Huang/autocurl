@@ -2,6 +2,7 @@
 
 Start with:
 
+- [Website](https://lingbo-huang.github.io/autocurl/)
 - [Chinese quick start](README.zh-CN.md)
 - [IDE plugin guide](docs/ide-plugins.md)
 - [Chinese troubleshooting decision tree](docs/troubleshooting.zh-CN.md)
