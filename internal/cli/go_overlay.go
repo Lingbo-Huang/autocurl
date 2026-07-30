@@ -56,32 +56,16 @@ func addGoTrustOverlayWithCandidates(
 		return environment, "", fmt.Errorf("find Go x509 platform roots: %w", err)
 	}
 
-	replacementPath := filepath.Join(tempDirectory, "autocurl-go-roots.go")
-	replacement := `package x509
-
-import (
-	"errors"
-	"os"
-)
-
-func (c *Certificate) systemVerify(opts *VerifyOptions) (chains [][]*Certificate, err error) {
-	return nil, errors.New("autocurl: platform verifier disabled for process-scoped CA")
-}
-
-func loadSystemRoots() (*CertPool, error) {
-	path := os.Getenv("AUTOCURL_CA_FILE")
-	data, err := os.ReadFile(path)
+	platformRoots, err := os.ReadFile(target)
 	if err != nil {
-		return nil, err
+		return environment, "", fmt.Errorf("read Go x509 platform roots: %w", err)
 	}
-	roots := NewCertPool()
-	if !roots.AppendCertsFromPEM(data) {
-		return nil, errors.New("autocurl: temporary CA file contains no certificates")
+	replacement, err := buildGoTrustOverlaySource(platformRoots)
+	if err != nil {
+		return environment, "", err
 	}
-	return roots, nil
-}
-`
-	if err := os.WriteFile(replacementPath, []byte(replacement), 0o600); err != nil {
+	replacementPath := filepath.Join(tempDirectory, "autocurl-go-roots.go")
+	if err := os.WriteFile(replacementPath, replacement, 0o600); err != nil {
 		return environment, "", fmt.Errorf("write Go trust overlay source: %w", err)
 	}
 
@@ -105,6 +89,54 @@ func loadSystemRoots() (*CertPool, error) {
 		"GOFLAGS":          goFlags,
 	})
 	return environment, "Go build-process CA overlay enabled for " + runtime.GOOS, nil
+}
+
+func buildGoTrustOverlaySource(platformRoots []byte) ([]byte, error) {
+	const systemVerify = "func (c *Certificate) systemVerify(opts *VerifyOptions) " +
+		"(chains [][]*Certificate, err error) {"
+	const platformVerify = "func (c *Certificate) autocurlPlatformVerify(opts *VerifyOptions) " +
+		"(chains [][]*Certificate, err error) {"
+
+	source := string(platformRoots)
+	if !strings.Contains(source, systemVerify) {
+		return nil, fmt.Errorf("patch Go x509 platform roots: systemVerify signature not found")
+	}
+	source = strings.Replace(source, systemVerify, platformVerify, 1)
+
+	if !strings.Contains(source, "\n\t\"os\"\n") {
+		const importBlock = "import (\n"
+		if !strings.Contains(source, importBlock) {
+			return nil, fmt.Errorf("patch Go x509 platform roots: import block not found")
+		}
+		source = strings.Replace(source, importBlock, importBlock+"\t\"os\"\n", 1)
+	}
+
+	source += `
+
+// systemVerify preserves the operating-system verifier for direct and bypassed
+// traffic, then falls back to Autocurl's process-scoped CA for intercepted
+// traffic. The fallback uses a non-system CertPool to avoid recursion.
+func (c *Certificate) systemVerify(opts *VerifyOptions) (chains [][]*Certificate, err error) {
+	chains, platformErr := c.autocurlPlatformVerify(opts)
+	if platformErr == nil {
+		return chains, nil
+	}
+
+	data, readErr := os.ReadFile(os.Getenv("AUTOCURL_CA_FILE"))
+	if readErr != nil {
+		return nil, platformErr
+	}
+	roots := NewCertPool()
+	if !roots.AppendCertsFromPEM(data) {
+		return nil, platformErr
+	}
+
+	fallback := *opts
+	fallback.Roots = roots
+	return c.Verify(fallback)
+}
+`
+	return []byte(source), nil
 }
 
 func discoverGoExecutable(environment, candidates []string) (string, error) {

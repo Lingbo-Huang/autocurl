@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Unsupported Compound" type="CompoundRunConfigurationType">
+    <toRun name="Autocurl Python Demo" type="PythonConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

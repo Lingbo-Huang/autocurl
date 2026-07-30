@@ -1,0 +1,18 @@
+{
+  "method": "POST",
+  "url": "https://api.example.com/orders",
+  "protocol": "HTTP/2",
+  "headers": {
+    "Content-Type": "application/json",
+    "get-info": "true"
+  },
+  "body": {
+    "user_id": 10086,
+    "items": [
+      {
+        "sku": "demo-001",
+        "quantity": 2
+      }
+    ]
+  }
+}

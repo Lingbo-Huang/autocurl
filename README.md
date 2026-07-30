@@ -6,7 +6,8 @@
 
 [简体中文](README.zh-CN.md)
 
-[Privacy](PRIVACY.md) · [Support](SUPPORT.md)
+[Website](https://lingbo-huang.github.io/autocurl/) ·
+[Roadmap](ROADMAP.md) · [Privacy](PRIVACY.md) · [Support](SUPPORT.md)
 
 Turn outbound requests from one IDE Run/Debug process into safe, replayable
 cURL commands—without changing application code or the operating-system proxy.
@@ -96,6 +97,12 @@ See the [IDE plugin guide](docs/ide-plugins.md) for installation, settings,
 architecture, and packaging. Maintainers can use the
 [marketplace publication runbook](docs/marketplace-publishing.zh-CN.md) for
 one-time account setup and automated tagged releases.
+
+Contributors recording public demos should follow the
+[manual click-by-click recording runbook](docs/demo-recording-runbook.zh-CN.md)
+and the [PixPin window-recording storyboard](docs/demo-videos.zh-CN.md). They
+use only the repository examples and cover capture, offline JSON rendering,
+bypass rules, custom clients, unsupported configurations, and process restart.
 
 ## One-minute workflow: capture and copy one request
 

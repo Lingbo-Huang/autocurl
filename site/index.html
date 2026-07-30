@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Autocurl — Stop rebuilding cURL by hand</title>
+    <meta
+      name="description"
+      content="Capture the outbound request your code actually sent—headers, nested body and protocol—inside JetBrains IDEs, VS Code, and Cursor."
+    >
+    <meta name="theme-color" content="#ffffff">
+    <meta name="color-scheme" content="light">
+    <link rel="canonical" href="https://lingbo-huang.github.io/autocurl/">
+    <link rel="alternate" hreflang="en" href="https://lingbo-huang.github.io/autocurl/">
+    <link rel="alternate" hreflang="zh-CN" href="https://lingbo-huang.github.io/autocurl/zh/">
+    <link rel="icon" href="./assets/autocurl-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Autocurl — Stop rebuilding cURL by hand">
+    <meta
+      property="og:description"
+      content="Capture the outbound request your code actually sent and copy a replayable cURL—without changing application code or the system proxy."
+    >
+    <meta property="og:url" content="https://lingbo-huang.github.io/autocurl/">
+    <meta
+      property="og:image"
+      content="https://lingbo-huang.github.io/autocurl/assets/autocurl-goland-post.jpg"
+    >
+    <meta name="twitter:card" content="summary_large_image">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Autocurl",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS, Linux, Windows",
+        "softwareVersion": "0.3.2",
+        "license": "https://opensource.org/license/mit",
+        "url": "https://lingbo-huang.github.io/autocurl/",
+        "downloadUrl": "https://github.com/Lingbo-Huang/autocurl/releases/latest",
+        "codeRepository": "https://github.com/Lingbo-Huang/autocurl",
+        "author": {
+          "@type": "Person",
+          "name": "Huang Lingbo"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="./" aria-label="Autocurl home">
+          <img src="./assets/autocurl-mark.svg" alt="" width="34" height="34">
+          <span>Autocurl</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#demos">Demos</a>
+          <a href="#protocols">Protocols</a>
+          <a href="#trust">Trust</a>
+          <a href="#teams">For teams</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl">GitHub</a>
+        </nav>
+        <a class="language-link" href="./zh/" lang="zh-CN">中文</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <h1><span class="headline-line">Stop rebuilding</span><br>cURL by hand.</h1>
+            <p class="hero-lede">
+              Capture the outbound request your code actually sent—headers,
+              nested body and protocol—inside your IDE. No SDK. No system proxy.
+            </p>
+            <div class="hero-actions">
+              <a
+                class="button button-primary js-latest-release"
+                href="https://github.com/Lingbo-Huang/autocurl/releases/latest"
+              >
+                Install <span class="js-release-version">v0.3.2</span>
+              </a>
+              <a
+                class="button button-secondary"
+                href="https://github.com/Lingbo-Huang/autocurl"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <path d="M12 .7a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.52-1.34-1.28-1.7-1.28-1.7-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.57-.3-5.28-1.29-5.28-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18a10.9 10.9 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.71 5.39-5.29 5.68.42.36.79 1.07.79 2.16v3.2c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"/>
+                </svg>
+                View on GitHub
+              </a>
+            </div>
+            <p class="proof-rail" aria-label="Supported runtimes and protocols">
+              <span>Go</span><span>Java</span><span>Python</span><span>Node.js</span>
+              <i aria-hidden="true"></i>
+              <span>HTTP/1.1</span><span>HTTP/2</span><span>gRPC</span><span>WebSocket</span>
+            </p>
+          </div>
+
+          <figure class="product-shot">
+            <img
+              src="./assets/autocurl-goland-post.jpg"
+              alt="Autocurl capturing a GET and a nested JSON POST inside GoLand"
+              width="1276"
+              height="768"
+            >
+            <figcaption>Real GoLand capture: select POST, copy the complete nested body.</figcaption>
+          </figure>
+          <div class="request-trace" aria-hidden="true"><i></i></div>
+        </div>
+      </section>
+
+      <section class="section workflow-section" id="how-it-works">
+        <div class="shell">
+          <h2>From running code to replayable cURL.</h2>
+          <ol class="workflow">
+            <li>
+              <span class="step-number">1</span>
+              <div>
+                <h3>Run your code</h3>
+                <p>Start an existing Run or Debug configuration.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number">2</span>
+              <div>
+                <h3>Autocurl captures</h3>
+                <p>It observes the exact outbound request from this process.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number">3</span>
+              <div>
+                <h3>Copy and replay</h3>
+                <p>Select a request and copy the complete cURL.</p>
+              </div>
+            </li>
+          </ol>
+
+          <div class="capture-demo" aria-label="Illustrative Autocurl request capture">
+            <div class="request-list">
+              <div class="request-list-head">Example requests</div>
+              <button class="request-row is-selected" type="button" data-request="get">
+                <strong>GET</strong>
+                <span>api.example.com/v1/users</span>
+                <small>HTTP/2</small>
+              </button>
+              <button class="request-row" type="button" data-request="post">
+                <strong>POST</strong>
+                <span>api.example.com/v1/orders</span>
+                <small>HTTP/2 · JSON body</small>
+              </button>
+              <button class="request-row" type="button" data-request="wss">
+                <strong>WSS</strong>
+                <span>stream.example.com/v1/events</span>
+                <small>WebSocket handshake</small>
+              </button>
+            </div>
+            <div class="curl-panel">
+              <div class="curl-panel-head">
+                <span>cURL</span>
+                <button class="copy-button" type="button" data-copy-curl>
+                  <svg aria-hidden="true" viewBox="0 0 24 24">
+                    <path d="M9 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2m-8-10H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H9Z"/>
+                  </svg>
+                  <span>Copy cURL</span>
+                </button>
+              </div>
+              <pre><code data-curl-output>curl \
+  --request 'GET' \
+  --url 'https://api.example.com/v1/users?active=true' \
+  --http2 \
+  --header 'Accept: application/json' \
+  --header 'Authorization: [REDACTED]'</code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section demos-section" id="demos">
+        <div class="shell">
+          <div class="section-intro demos-intro">
+            <p class="eyebrow">Real workflows · no application changes</p>
+            <h2>See Autocurl handle the awkward cases.</h2>
+            <p>
+              Seven short, uncut demonstrations across JetBrains IDEs, VS Code,
+              and Cursor. Videos load only when you press play.
+            </p>
+          </div>
+          <div class="demo-grid">
+            <article class="demo-card demo-card-featured">
+              <video controls preload="none" playsinline poster="./assets/videos/01-jetbrains-java-post.png">
+                <source src="./assets/videos/01-jetbrains-java-post.mp4" type="video/mp4">
+              </video>
+              <div><span>01 · JetBrains</span><h3>Complete Java POST</h3><p>Capture HTTP/2, redacted headers, and a deeply nested JSON body.</p></div>
+            </article>
+            <article class="demo-card demo-card-featured">
+              <video controls preload="none" playsinline poster="./assets/videos/02-vscode-node-debug-autocapture.png">
+                <source src="./assets/videos/02-vscode-node-debug-autocapture.mp4" type="video/mp4">
+              </video>
+              <div><span>02 · VS Code</span><h3>Automatic Debug capture</h3><p>Start Node.js Debug normally; the request appears without a separate CLI command.</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="./assets/videos/03-breakpoint-json-to-curl.png">
+                <source src="./assets/videos/03-breakpoint-json-to-curl.mp4" type="video/mp4">
+              </video>
+              <div><span>03 · Offline</span><h3>JSON to cURL</h3><p>Generate a replayable cURL before the request is sent.</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="./assets/videos/04-bypass-capture.png">
+                <source src="./assets/videos/04-bypass-capture.mp4" type="video/mp4">
+              </video>
+              <div><span>04 · Safe mode</span><h3>Bypass sensitive targets</h3><p>Keep mTLS, pinned, domain, IP, and CIDR destinations end-to-end.</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="./assets/videos/05-custom-client-explicit-proxy.png">
+                <source src="./assets/videos/05-custom-client-explicit-proxy.mp4" type="video/mp4">
+              </video>
+              <div><span>05 · GoLand</span><h3>Custom HTTP client</h3><p>See why Proxy:nil is invisible, then capture with an explicit process proxy.</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="./assets/videos/06-pycharm-standard-run-configuration.png">
+                <source src="./assets/videos/06-pycharm-standard-run-configuration.mp4" type="video/mp4">
+              </video>
+              <div><span>06 · PyCharm</span><h3>Unsupported vs standard config</h3><p>A Compound config cannot expose environment variables; a Python config can.</p></div>
+            </article>
+            <article class="demo-card">
+              <video controls preload="none" playsinline poster="./assets/videos/07-cursor-restart-under-autocurl.png">
+                <source src="./assets/videos/07-cursor-restart-under-autocurl.mp4" type="video/mp4">
+              </video>
+              <div><span>07 · Cursor</span><h3>Restart under Autocurl</h3><p>An existing process stays untouched; a fresh Debug launch is captured.</p></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="protocol-section" id="protocols">
+        <div class="shell protocol-inner">
+          <div>
+            <h2>One capture path. Four runtimes.</h2>
+            <p>
+              Headers, nested JSON bodies, query parameters and protocol details
+              stay together.
+            </p>
+          </div>
+          <div class="support-lines">
+            <p><b>Runtimes</b><span>Go</span><span>Java</span><span>Python</span><span>Node.js</span></p>
+            <p><b>Protocols</b><span>HTTP/1.1</span><span>HTTP/2</span><span>gRPC</span><span>WebSocket</span></p>
+            <p><b>IDEs</b><span>JetBrains</span><span>VS Code</span><span>Cursor</span></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section trust-section" id="trust">
+        <div class="shell">
+          <div class="section-intro">
+            <h2>Capture one process.<br>Leave the machine alone.</h2>
+            <p>
+              Autocurl creates a temporary proxy session only for the Run or
+              Debug process you choose.
+            </p>
+          </div>
+
+          <div class="trust-grid">
+            <div class="scope-diagram" aria-label="Autocurl process scope diagram">
+              <div class="diagram-node ide-node">
+                <span class="node-icon">&lt;/&gt;</span>
+                <b>IDE</b>
+                <small>Run / Debug configuration</small>
+              </div>
+              <span class="diagram-arrow" aria-hidden="true"></span>
+              <div class="process-boundary">
+                <span class="boundary-label">Selected process only</span>
+                <div class="diagram-node autocurl-node">
+                  <img src="./assets/autocurl-mark.svg" alt="" width="42" height="42">
+                  <b>Autocurl session</b>
+                  <small>Ephemeral proxy · auto-terminates</small>
+                </div>
+              </div>
+              <span class="diagram-arrow" aria-hidden="true"></span>
+              <div class="diagram-node service-node">
+                <span class="node-icon">↗</span>
+                <b>Outbound services</b>
+                <small>HTTP · gRPC · WebSocket</small>
+              </div>
+              <div class="untouched">
+                <b>Outside the boundary</b>
+                <span>Operating-system proxy</span>
+                <span>Other apps and background traffic</span>
+                <em>Untouched by Autocurl</em>
+              </div>
+            </div>
+
+            <ul class="trust-list">
+              <li><i>✓</i><div><b>No application SDK</b><span>Nothing to import, install, or link into the app.</span></div></li>
+              <li><i>✓</i><div><b>No operating-system proxy changes</b><span>Network settings remain exactly as they are.</span></div></li>
+              <li><i>✓</i><div><b>No permanent CA installation</b><span>Ephemeral trust stays scoped to the captured process.</span></div></li>
+              <li><i>✓</i><div><b>Redaction on by default</b><span>Common credentials are masked before display and export.</span></div></li>
+              <li class="normal-run"><i>→</i><div><b>Normal Run / Debug stays untouched.</b><span>Only the Autocurl action creates a capture session.</span></div></li>
+            </ul>
+          </div>
+
+          <div class="infrastructure-band">
+            <div>
+              <h3>Built for real infrastructure.</h3>
+              <p>
+                Safe mode preserves end-to-end TLS for incompatible targets.
+                Bypass mTLS, certificate-pinned, internal infrastructure,
+                domain, IP, or CIDR destinations without breaking the rest of
+                the session.
+              </p>
+            </div>
+            <pre aria-label="Autocurl bypass example"><code><span># Keep infrastructure direct</span>
+autocurl run --all \
+  --bypass 10.0.0.0/8 \
+  -- go run .</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section open-source-section" id="teams">
+        <div class="shell open-source-grid">
+          <div>
+            <h2>
+              <span class="headline-line">Free for developers.</span><br>
+              <span class="headline-line">Sustainable for teams.</span>
+            </h2>
+            <p>
+              The local capture engine and individual IDE workflow stay open
+              source under MIT.
+            </p>
+            <p>
+              Teams need more than a cURL: shared redaction policies, workspace
+              presets, self-hosted distribution, and support.
+            </p>
+          </div>
+          <div class="policy-flow" aria-label="Open source engine with optional team policy">
+            <div>
+              <img src="./assets/autocurl-mark.svg" alt="" width="40" height="40">
+              <b>Local capture engine</b>
+              <span>Free and open source</span>
+            </div>
+            <pre><code>redact:
+  - Authorization
+  - Cookie
+preserve:
+  - Content-Type</code></pre>
+            <div>
+              <b>Team layer</b>
+              <span>Shared policy · distribution · support</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="team-band">
+          <div class="shell team-grid">
+            <div>
+              <h3>
+                <span class="headline-line">Teams need shared context.</span><br>
+                <span class="headline-line">Pilot Autocurl together.</span>
+              </h3>
+              <p>Bring consistent capture, redaction, and distribution to your engineering workflow.</p>
+              <div class="team-actions">
+                <a
+                  class="button button-primary"
+                  href="https://github.com/Lingbo-Huang/autocurl/issues/new?template=team_pilot.yml"
+                >
+                  Join the team pilot
+                </a>
+                <a
+                  class="button button-dark-secondary"
+                  href="https://github.com/Lingbo-Huang/autocurl/blob/main/ROADMAP.md"
+                >
+                  See the roadmap
+                </a>
+              </div>
+            </div>
+            <pre><code><span># workspace-policy.yml</span>
+redact:
+  - Authorization
+  - Cookie
+  - X-Api-Key
+preserve:
+  - Accept
+  - Content-Type
+  - User-Agent</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section install-section" id="install">
+        <div class="shell install-grid">
+          <div>
+            <h2>Capture your next request,<br>not your afternoon.</h2>
+            <p>
+              Install Autocurl, run an existing configuration, and copy the
+              request your code actually sent.
+            </p>
+          </div>
+          <div class="install-links">
+            <a
+              data-release-asset="jetbrains"
+              href="https://github.com/Lingbo-Huang/autocurl/releases/latest"
+            >
+              <span>JetBrains</span><small>IDEA · GoLand · PyCharm · WebStorm</small><b>→</b>
+            </a>
+            <a
+              data-release-asset="vscode"
+              href="https://github.com/Lingbo-Huang/autocurl/releases/latest"
+            >
+              <span>VS Code / Cursor</span><small>Install the VSIX package</small><b>→</b>
+            </a>
+            <a href="https://github.com/Lingbo-Huang/autocurl#install">
+              <span>CLI</span><small>Go install or prebuilt archive</small><b>→</b>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-inner">
+        <a class="brand footer-brand" href="./">
+          <img src="./assets/autocurl-mark.svg" alt="" width="28" height="28">
+          <span>Autocurl</span>
+        </a>
+        <nav aria-label="Footer navigation">
+          <a href="https://github.com/Lingbo-Huang/autocurl">GitHub</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/blob/main/README.md">Documentation</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/releases">Releases</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/blob/main/PRIVACY.md">Privacy</a>
+          <a href="https://github.com/Lingbo-Huang/autocurl/blob/main/LICENSE">MIT License</a>
+        </nav>
+        <p>Built in the open by Huang Lingbo.</p>
+      </div>
+    </footer>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

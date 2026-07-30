@@ -1,0 +1,69 @@
+name: Team pilot
+description: Explore shared Autocurl policy, distribution, or paid integration support
+title: "[team pilot] "
+labels: ["team-pilot"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for exploring Autocurl with your team.
+
+        Keep this issue safe for a public repository. Do not include internal
+        hostnames, credentials, request bodies, customer data, private
+        certificate details, or proprietary code. If the discussion needs
+        private context, describe only the category here and the maintainer will
+        propose a private follow-up channel.
+  - type: dropdown
+    id: interest
+    attributes:
+      label: What would help your team?
+      multiple: true
+      options:
+        - Shared redaction and header policies
+        - Workspace capture and bypass presets
+        - Self-hosted or offline plugin distribution
+        - Private gateway, certificate, or runtime integration
+        - Compatibility support and training
+        - Other team workflow
+    validations:
+      required: true
+  - type: input
+    id: team_size
+    attributes:
+      label: Approximate developer team size
+      placeholder: "For example: 20–50"
+    validations:
+      required: true
+  - type: input
+    id: runtimes
+    attributes:
+      label: IDEs and runtimes
+      placeholder: "For example: IntelliJ IDEA + Java, GoLand + Go"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Sanitized team problem
+      description: Describe the repeated workflow or governance problem without internal data.
+    validations:
+      required: true
+  - type: dropdown
+    id: engagement
+    attributes:
+      label: Preferred next step
+      options:
+        - Product interview
+        - Free design-partner pilot
+        - Paid fixed-scope integration
+        - Enterprise/self-hosted evaluation
+        - Just sharing feedback
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Public issue safety
+      options:
+        - label: I removed credentials, internal hostnames, private request data, and proprietary code.
+          required: true

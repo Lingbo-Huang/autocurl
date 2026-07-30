@@ -12,6 +12,10 @@ const repository = "Lingbo-Huang/autocurl";
 // Keep this aligned with the extension version. Older engines may be protocol
 // compatible while still missing runtime fixes such as platform Go CA trust.
 const minimumVersion = "0.3.2";
+// macOS security software can delay the first execution of a newly downloaded
+// binary well beyond five seconds. Keep the compatibility probe bounded, but
+// allow enough time for that one-time scan to complete.
+export const BINARY_VERSION_TIMEOUT_MS = 30_000;
 
 interface ReleaseAsset {
   name: string;
@@ -79,7 +83,7 @@ export class BinaryManager {
 
   private async requireCompatible(binary: string): Promise<void> {
     const { stdout } = await execFileAsync(binary, ["version"], {
-      timeout: 5000,
+      timeout: BINARY_VERSION_TIMEOUT_MS,
       windowsHide: true,
     });
     const version = stdout.trim().replace(/^v/, "");

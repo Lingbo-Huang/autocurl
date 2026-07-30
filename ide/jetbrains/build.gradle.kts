@@ -16,6 +16,7 @@ repositories {
 dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testImplementation("org.mockito:mockito-core:5.14.2")
     testRuntimeOnly("junit:junit:4.13.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     intellijPlatform {
@@ -117,6 +118,7 @@ intellijPlatform {
               <li>Kept Copy cURL, Quick Start, and the remaining actions visible in narrow tool windows.</li>
               <li>Added an IntelliJ IDEA-ready Maven project for the Java HTTP/2 example.</li>
               <li>Clarified why bodyless GET requests show only URL and headers and how to verify POST bodies.</li>
+              <li>Allowed macOS security scanning to finish before rejecting a newly downloaded Autocurl engine.</li>
             </ul>
 
             <h3>0.3.1</h3>

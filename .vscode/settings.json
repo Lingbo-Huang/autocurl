@@ -1,0 +1,8 @@
+{
+  "autocurl.autoStartOnDebug": true,
+  "autocurl.injectDebugEnvironment": true,
+  "go.goroot": "/opt/homebrew/Cellar/go/1.24.3/libexec",
+  "go.alternateTools": {
+    "go": "/opt/homebrew/Cellar/go/1.24.3/bin/go"
+  }
+}

@@ -26,6 +26,7 @@ public final class EngineManager {
     // Keep this aligned with the plugin version. A merely API-compatible older
     // engine can still miss runtime fixes such as platform-specific Go CA trust.
     private static final String MINIMUM_VERSION = "0.3.2";
+    static final long VERSION_CHECK_TIMEOUT_SECONDS = 30;
     private static final Gson GSON = new Gson();
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.ALWAYS)
@@ -68,7 +69,7 @@ public final class EngineManager {
 
     private static void requireCompatible(String executable) throws Exception {
         Process process = new ProcessBuilder(executable, "version").start();
-        if (!process.waitFor(5, TimeUnit.SECONDS)) {
+        if (!process.waitFor(VERSION_CHECK_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
             process.destroyForcibly();
             throw new IOException("Timed out checking " + executable);
         }

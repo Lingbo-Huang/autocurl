@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lingbo-huang.github.io/autocurl/sitemap.xml

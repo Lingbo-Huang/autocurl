@@ -9,6 +9,16 @@ permissions:
   contents: read
 
 jobs:
+  website:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check site/app.js
+      - run: node scripts/check-site.mjs
+
   engine:
     strategy:
       matrix:

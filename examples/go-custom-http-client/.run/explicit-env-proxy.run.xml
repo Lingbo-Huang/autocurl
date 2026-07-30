@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="explicit-env-proxy" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="go-custom-http-client" />
+    <working_directory value="$PROJECT_DIR$" />
+    <parameters value="-proxy-mode explicit-env-proxy" />
+    <kind value="FILE" />
+    <package value="" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

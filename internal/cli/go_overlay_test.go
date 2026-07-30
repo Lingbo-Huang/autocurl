@@ -45,7 +45,17 @@ func TestDiscoverGoExecutableFromLoginShellWithGUIPath(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(rootSource), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(rootSource, []byte("package x509\n"), 0o600); err != nil {
+	fakePlatformRoots := `package x509
+
+import (
+	"errors"
+)
+
+func (c *Certificate) systemVerify(opts *VerifyOptions) (chains [][]*Certificate, err error) {
+	return nil, errors.New("platform verifier")
+}
+`
+	if err := os.WriteFile(rootSource, []byte(fakePlatformRoots), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -88,5 +98,50 @@ func TestDiscoverGoExecutableFromLoginShellWithGUIPath(t *testing.T) {
 	}
 	if got := environmentValue(environment, "AUTOCURL_CA_FILE"); got != caPath {
 		t.Fatalf("AUTOCURL_CA_FILE = %q, want %q", got, caPath)
+	}
+}
+
+func TestBuildGoTrustOverlaySourcePreservesPlatformVerification(t *testing.T) {
+	platformRoots := []byte(`package x509
+
+import (
+	"errors"
+)
+
+func (c *Certificate) systemVerify(opts *VerifyOptions) (chains [][]*Certificate, err error) {
+	return nil, errors.New("platform verifier")
+}
+
+func loadSystemRoots() (*CertPool, error) {
+	return &CertPool{systemPool: true}, nil
+}
+`)
+
+	replacement, err := buildGoTrustOverlaySource(platformRoots)
+	if err != nil {
+		t.Fatalf("buildGoTrustOverlaySource returned an error: %v", err)
+	}
+	source := string(replacement)
+	for _, expected := range []string{
+		`"os"`,
+		"func (c *Certificate) autocurlPlatformVerify",
+		"chains, platformErr := c.autocurlPlatformVerify(opts)",
+		"fallback.Roots = roots",
+		"return c.Verify(fallback)",
+		"return &CertPool{systemPool: true}, nil",
+	} {
+		if !strings.Contains(source, expected) {
+			t.Fatalf("overlay source does not contain %q:\n%s", expected, source)
+		}
+	}
+	if strings.Count(source, "func (c *Certificate) systemVerify") != 1 {
+		t.Fatalf("overlay source should define exactly one systemVerify:\n%s", source)
+	}
+}
+
+func TestBuildGoTrustOverlaySourceRejectsUnexpectedPlatformSource(t *testing.T) {
+	_, err := buildGoTrustOverlaySource([]byte("package x509\n"))
+	if err == nil {
+		t.Fatal("buildGoTrustOverlaySource accepted a source without systemVerify")
 	}
 }
